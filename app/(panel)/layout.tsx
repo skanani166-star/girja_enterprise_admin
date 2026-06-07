@@ -1,9 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Package, MessageSquare, FolderOpen,
-  Zap, Menu, X
+  Zap, Menu, LogOut
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -16,7 +16,14 @@ const navItems = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/login');
+    router.refresh();
+  };
 
   return (
     <div className="min-h-screen bg-[#080808] flex">
@@ -70,7 +77,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Menu size={20} />
           </button>
           <div className="flex-1" />
-          <span className="text-gray-600 text-xs">Admin • Girja Enterprise</span>
+          <span className="text-gray-600 text-xs hidden sm:inline">Admin • Girja Enterprise</span>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 text-gray-500 hover:text-white text-xs transition-colors"
+          >
+            <LogOut size={14} />
+            Logout
+          </button>
         </header>
 
         {/* Page content */}
