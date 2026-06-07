@@ -8,10 +8,10 @@ import {
 import { useState } from 'react';
 
 const navItems = [
-  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/admin/products', label: 'Products', icon: Package },
-  { href: '/admin/orders', label: 'Enquiries', icon: MessageSquare },
-  { href: '/admin/categories', label: 'Categories', icon: FolderOpen },
+  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/products', label: 'Products', icon: Package },
+  { href: '/orders', label: 'Enquiries', icon: MessageSquare },
+  { href: '/categories', label: 'Categories', icon: FolderOpen },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -38,7 +38,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Nav */}
         <nav className="flex-1 p-3 space-y-1">
           {navItems.map((item) => {
-            const active = pathname === item.href;
+            const active = item.href === '/'
+              ? pathname === '/'
+              : pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
               <Link key={item.href} href={item.href} onClick={() => setSidebarOpen(false)}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${

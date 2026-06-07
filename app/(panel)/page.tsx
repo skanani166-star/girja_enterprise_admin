@@ -36,7 +36,7 @@ export default function AdminPage() {
           <h1 className="font-display text-4xl text-white mb-1">DASHBOARD</h1>
           <p className="text-gray-500 text-sm">Welcome back! Here's your store overview.</p>
         </div>
-        <Link href="/admin/products"
+        <Link href="/products"
           className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-all uppercase tracking-wide">
           <Plus size={14} /> Add Product
         </Link>
@@ -64,7 +64,7 @@ export default function AdminPage() {
         <div className="bg-[#111] border border-white/5 rounded-2xl overflow-hidden">
           <div className="p-5 border-b border-white/5 flex items-center justify-between">
             <h2 className="text-white font-semibold text-sm uppercase tracking-wide">Recent Enquiries</h2>
-            <Link href="/admin/orders" className="text-orange-400 text-xs hover:underline flex items-center gap-1">
+            <Link href="/orders" className="text-orange-400 text-xs hover:underline flex items-center gap-1">
               View all <ArrowRight size={11} />
             </Link>
           </div>
@@ -105,7 +105,7 @@ export default function AdminPage() {
         <div className="bg-[#111] border border-white/5 rounded-2xl overflow-hidden">
           <div className="p-5 border-b border-white/5 flex items-center justify-between">
             <h2 className="text-white font-semibold text-sm uppercase tracking-wide">Products</h2>
-            <Link href="/admin/products" className="text-orange-400 text-xs hover:underline flex items-center gap-1">
+            <Link href="/products" className="text-orange-400 text-xs hover:underline flex items-center gap-1">
               Manage <ArrowRight size={11} />
             </Link>
           </div>
