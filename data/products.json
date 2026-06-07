@@ -1,0 +1,214 @@
+{
+  "categories": [
+    {
+      "id": "tshirts",
+      "name": "T-Shirts",
+      "slug": "tshirts",
+      "description": "Premium corporate t-shirts with custom branding",
+      "icon": "Shirt"
+    },
+    {
+      "id": "caps",
+      "name": "Caps & Hats",
+      "slug": "caps",
+      "description": "Stylish caps and hats for your team",
+      "icon": "HardHat"
+    },
+    {
+      "id": "bags",
+      "name": "Bags",
+      "slug": "bags",
+      "description": "Durable bags and backpacks for corporate use",
+      "icon": "ShoppingBag"
+    }
+  ],
+  "products": [
+    {
+      "id": "ts003",
+      "name": "Dry-Fit Sports T-Shirt",
+      "slug": "dry-fit-sports-tshirt",
+      "category": "tshirts",
+      "price": 380,
+      "minQty": 30,
+      "description": "High-performance dry-fit t-shirt for corporate sports events, marathons, and outdoor activities. Moisture-wicking technology keeps you cool.",
+      "features": [
+        "100% Polyester dry-fit",
+        "Moisture wicking",
+        "Anti-odor finish",
+        "Sublimation printing",
+        "Lightweight & breathable"
+      ],
+      "colors": [
+        "White",
+        "Black",
+        "Red",
+        "Blue",
+        "Green"
+      ],
+      "image": "/images/dry-fit.jpg",
+      "badge": "Sports",
+      "material": "silk",
+      "weight": "140 GSM"
+    },
+    {
+      "id": "cap001",
+      "name": "Structured Baseball Cap",
+      "slug": "structured-baseball-cap",
+      "category": "caps",
+      "price": 280,
+      "minQty": 25,
+      "description": "Classic 6-panel structured baseball cap with adjustable back strap. Premium embroidery and printing options available for your brand logo.",
+      "features": [
+        "6-panel structured design",
+        "Pre-curved visor",
+        "Sweatband lining",
+        "Adjustable snap back",
+        "3D embroidery option"
+      ],
+      "colors": [
+        "Black",
+        "Navy Blue",
+        "White",
+        "Khaki",
+        "Red",
+        "Grey"
+      ],
+      "image": "/images/baseball-cap.jpg",
+      "badge": "Top Pick",
+      "material": "Cotton Twill",
+      "weight": "N/A"
+    },
+    {
+      "id": "cap002",
+      "name": "Trucker Mesh Cap",
+      "slug": "trucker-mesh-cap",
+      "category": "caps",
+      "price": 220,
+      "minQty": 25,
+      "description": "Breathable 5-panel trucker cap with foam front and mesh back. Ideal for outdoor events and summer promotions.",
+      "features": [
+        "5-panel design",
+        "Foam structured front",
+        "Mesh back panels",
+        "Snap-back closure",
+        "High-visibility printing"
+      ],
+      "colors": [
+        "Black/Black",
+        "White/Black",
+        "Navy/White",
+        "Red/White",
+        "Camo/Black"
+      ],
+      "image": "/images/trucker-cap.jpg",
+      "badge": "Summer Special",
+      "material": "Foam + Mesh",
+      "weight": "N/A"
+    },
+    {
+      "id": "cap003",
+      "name": "Bucket Hat",
+      "slug": "bucket-hat",
+      "category": "caps",
+      "price": 250,
+      "minQty": 20,
+      "description": "Stylish bucket hat suitable for all-around branding. Full coverage and UV protection makes it perfect for outdoor corporate events.",
+      "features": [
+        "360° brim design",
+        "UV protection",
+        "All-over sublimation print",
+        "Adjustable drawstring",
+        "Packable & lightweight"
+      ],
+      "colors": [
+        "White",
+        "Black",
+        "Beige",
+        "Navy",
+        "Olive"
+      ],
+      "image": "/images/bucket-hat.jpg",
+      "badge": "Trending",
+      "material": "Canvas / Poly",
+      "weight": "N/A"
+    },
+    {
+      "id": "bag001",
+      "name": "Corporate Laptop Backpack",
+      "slug": "corporate-laptop-backpack",
+      "category": "bags",
+      "price": 1200,
+      "minQty": 10,
+      "description": "Professional 30L laptop backpack with dedicated 15.6\" laptop compartment. Perfect for corporate gifting and employee kits.",
+      "features": [
+        "30L capacity",
+        "Fits 15.6\" laptop",
+        "USB charging port",
+        "Padded back support",
+        "Multiple compartments",
+        "Logo embossing/printing"
+      ],
+      "colors": [
+        "Black",
+        "Grey",
+        "Navy Blue"
+      ],
+      "image": "/images/laptop-bag.jpg",
+      "badge": "Corporate Gift",
+      "material": "600D Polyester",
+      "weight": "800g"
+    },
+    {
+      "id": "bag002",
+      "name": "Canvas Tote Bag",
+      "slug": "canvas-tote-bag",
+      "category": "bags",
+      "price": 180,
+      "minQty": 50,
+      "description": "Eco-friendly heavy canvas tote bag for events, trade shows, and daily corporate use. Large print area for maximum brand visibility.",
+      "features": [
+        "Heavy 12oz canvas",
+        "Large print area",
+        "Reinforced handles",
+        "Inner zip pocket",
+        "Eco-friendly material"
+      ],
+      "colors": [
+        "Natural",
+        "Black",
+        "Navy",
+        "Red",
+        "Green"
+      ],
+      "image": "/images/tote-bag.jpg",
+      "badge": "Eco Friendly",
+      "material": "12oz Canvas",
+      "weight": "350g"
+    },
+    {
+      "id": "bag003",
+      "name": "Executive Duffel Bag",
+      "slug": "executive-duffel-bag",
+      "category": "bags",
+      "price": 850,
+      "minQty": 15,
+      "description": "Premium duffel bag for corporate travel and sports. Spacious main compartment with separate shoe pocket and water bottle holder.",
+      "features": [
+        "45L main compartment",
+        "Separate shoe compartment",
+        "Water bottle holder",
+        "Padded shoulder strap",
+        "Laser engraving option"
+      ],
+      "colors": [
+        "Black",
+        "Grey",
+        "Navy"
+      ],
+      "image": "/images/duffel-bag.jpg",
+      "badge": "Premium",
+      "material": "PU + Polyester",
+      "weight": "600g"
+    }
+  ]
+}
