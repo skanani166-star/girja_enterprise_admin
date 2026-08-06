@@ -127,7 +127,6 @@ export default function AdminPage() {
                     </div>
                   </div>
                   <div className="shrink-0 ml-2 text-right">
-                    <p className="text-orange-400 text-sm font-semibold">₹{p.price}</p>
                     <p className="text-gray-600 text-xs">Min {p.minQty} pcs</p>
                   </div>
                 </div>

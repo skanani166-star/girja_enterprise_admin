@@ -3,8 +3,29 @@ export const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 function getSecret(): string {
   const secret = process.env.AUTH_SECRET;
-  if (!secret) throw new Error('AUTH_SECRET environment variable is not set');
-  return secret;
+  if (secret) return secret;
+
+  // In development, generate an in-memory secret so session creation doesn't fail.
+  // This avoids a hard crash when .env doesn't include AUTH_SECRET while keeping
+  // production strict.
+  if (process.env.NODE_ENV === 'development') {
+    // cache a generated secret for the lifetime of the process
+    // eslint-disable-next-line no-underscore-dangle
+    if (!(globalThis as any).__DEV_AUTH_SECRET) {
+      try {
+        const arr = new Uint8Array(32);
+        globalThis.crypto.getRandomValues(arr);
+        (globalThis as any).__DEV_AUTH_SECRET = Array.from(arr).map((b: number) => b.toString(16).padStart(2, '0')).join('');
+      } catch {
+        (globalThis as any).__DEV_AUTH_SECRET = String(Math.random() + Date.now());
+      }
+      // eslint-disable-next-line no-console
+      console.warn('AUTH_SECRET not set — using generated dev secret (sessions will not persist across restarts).');
+    }
+    return (globalThis as any).__DEV_AUTH_SECRET as string;
+  }
+
+  throw new Error('AUTH_SECRET environment variable is not set');
 }
 
 function toBase64Url(value: string): string {
@@ -76,8 +97,39 @@ export async function verifySessionToken(token: string | undefined): Promise<boo
 }
 
 export function verifyCredentials(username: string, password: string): boolean {
-  const adminUser = process.env.ADMIN_USERNAME;
-  const adminPass = process.env.ADMIN_PASSWORD;
+  let adminUser = process.env.ADMIN_USERNAME;
+  let adminPass = process.env.ADMIN_PASSWORD;
+
+  // Fallback: try to read .env if variables are not present (useful in some deployment/dev setups)
+  if (!adminUser || !adminPass) {
+    try {
+      // Use dynamic require to avoid static Node imports (Edge runtime compatibility)
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      const req = typeof require === 'function' ? require : eval('typeof require === "function" ? require : undefined');
+      if (req) {
+        const _fs = req('fs');
+        const _path = req('path');
+        const envPath = _path.join(process.cwd(), '.env');
+        if (_fs.existsSync(envPath)) {
+          const contents = _fs.readFileSync(envPath, 'utf8');
+          for (const line of contents.split(/\r?\n/)) {
+            const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+            if (!m) continue;
+            const key = m[1];
+            let val = m[2] || '';
+            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+              val = val.slice(1, -1);
+            }
+            if (key === 'ADMIN_USERNAME') adminUser = adminUser || val;
+            if (key === 'ADMIN_PASSWORD') adminPass = adminPass || val;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   if (!adminUser || !adminPass) return false;
   return safeCompare(username, adminUser) && safeCompare(password, adminPass);
 }

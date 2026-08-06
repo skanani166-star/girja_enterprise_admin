@@ -1,20 +1,16 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, X, Save, Package } from 'lucide-react';
+import { useEffect, useState, type ChangeEvent } from 'react';
+import { Plus, Pencil, Trash2, X, Save, Package, ImagePlus } from 'lucide-react';
 
 const emptyForm = {
   id: '',
   name: '',
-  slug: '',
   category: 'tshirts',
-  price: '',
   minQty: '',
   description: '',
-  features: '',
-  colors: '',
-  badge: '',
   material: '',
-  weight: '',
+  image: '',
+  images: [] as string[],
 };
 
 export default function AdminProducts() {
@@ -26,6 +22,8 @@ export default function AdminProducts() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
 
   const fetchProducts = () => {
     setLoading(true);
@@ -41,39 +39,64 @@ export default function AdminProducts() {
   useEffect(() => { fetchProducts(); }, []);
 
   const openAdd = () => {
-    setForm(emptyForm);
+    setForm({ ...emptyForm, images: [] });
     setEditing(false);
+    setSelectedFiles([]);
+    setPreviewImages([]);
     setShowForm(true);
   };
 
   const openEdit = (product: any) => {
+    const existingImages = Array.isArray(product.images) && product.images.length
+      ? product.images
+      : product.image
+        ? [product.image]
+        : [];
+
     setForm({
       ...product,
-      features: Array.isArray(product.features) ? product.features.join('\n') : product.features,
-      colors: Array.isArray(product.colors) ? product.colors.join(', ') : product.colors,
+      image: product.image || '',
+      images: existingImages,
     });
     setEditing(true);
+    setSelectedFiles([]);
+    setPreviewImages(existingImages);
     setShowForm(true);
+  };
+
+  const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+
+    setSelectedFiles(prev => [...prev, ...files]);
+    setPreviewImages(prev => [...prev, ...files.map((file) => URL.createObjectURL(file))]);
+    event.target.value = '';
   };
 
   const handleSave = async () => {
     setSaving(true);
-    const payload = {
-      ...form,
-      price: Number(form.price),
-      minQty: Number(form.minQty),
-      slug: form.slug || form.name.toLowerCase().replace(/\s+/g, '-'),
-      features: form.features.split('\n').map((f: string) => f.trim()).filter(Boolean),
-      colors: form.colors.split(',').map((c: string) => c.trim()).filter(Boolean),
-    };
+    const formData = new FormData();
+
+    formData.append('id', form.id || '');
+    formData.append('name', form.name);
+    formData.append('category', form.category);
+    formData.append('minQty', String(Number(form.minQty || 0)));
+    formData.append('description', form.description || '');
+    formData.append('material', form.material || '');
+    formData.append('image', form.image || '');
+    formData.append('existingImages', JSON.stringify(form.images || []));
+    selectedFiles.forEach((file) => formData.append('newImages', file));
+
     const method = editing ? 'PUT' : 'POST';
     await fetch('/api/products', {
       method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: formData,
     });
+
     setSaving(false);
     setShowForm(false);
+    setSelectedFiles([]);
+    setPreviewImages([]);
     fetchProducts();
   };
 
@@ -110,54 +133,54 @@ export default function AdminProducts() {
               <tr className="border-b border-white/5">
                 <th className="text-left text-gray-600 text-xs uppercase tracking-wide px-5 py-3">Product</th>
                 <th className="text-left text-gray-600 text-xs uppercase tracking-wide px-5 py-3 hidden sm:table-cell">Category</th>
-                <th className="text-left text-gray-600 text-xs uppercase tracking-wide px-5 py-3">Price</th>
                 <th className="text-left text-gray-600 text-xs uppercase tracking-wide px-5 py-3 hidden md:table-cell">Min Qty</th>
-                <th className="text-left text-gray-600 text-xs uppercase tracking-wide px-5 py-3 hidden lg:table-cell">Badge</th>
                 <th className="px-5 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
-                <tr><td colSpan={6} className="text-center py-12 text-gray-600">Loading...</td></tr>
+                <tr><td colSpan={4} className="text-center py-12 text-gray-600">Loading...</td></tr>
               ) : products.length === 0 ? (
-                <tr><td colSpan={6} className="text-center py-12 text-gray-600">No products yet</td></tr>
-              ) : products.map((p) => (
-                <tr key={p.id} className="hover:bg-white/2 transition-colors">
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-[#1a1a1a] rounded-lg flex items-center justify-center shrink-0">
-                        <Package size={16} className="text-gray-600" />
+                <tr><td colSpan={4} className="text-center py-12 text-gray-600">No products yet</td></tr>
+              ) : products.map((p) => {
+                const mainImage = Array.isArray(p.images) && p.images.length ? p.images[0] : p.image || '';
+                return (
+                  <tr key={p.id} className="hover:bg-white/2 transition-colors">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-[#1a1a1a] rounded-lg overflow-hidden shrink-0 flex items-center justify-center">
+                          {mainImage ? (
+                            <img src={mainImage} alt={p.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <Package size={16} className="text-gray-600" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-white font-medium">{p.name}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-white font-medium">{p.name}</p>
-                        <p className="text-gray-600 text-xs">{p.slug}</p>
+                    </td>
+                    <td className="px-5 py-3 hidden sm:table-cell">
+                      <span className={`text-xs px-2 py-0.5 rounded capitalize font-medium ${categoryColor[p.category] || 'text-gray-400 bg-gray-800'}`}>
+                        {p.category}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-gray-400 hidden md:table-cell">{p.minQty} pcs</td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2 justify-end">
+                        <button onClick={() => openEdit(p)}
+                          className="w-8 h-8 bg-white/5 hover:bg-blue-500/10 border border-white/10 hover:border-blue-500/30 rounded-lg flex items-center justify-center text-gray-500 hover:text-blue-400 transition-all">
+                          <Pencil size={13} />
+                        </button>
+                        <button onClick={() => setDeleteConfirm(p.id)}
+                          className="w-8 h-8 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/30 rounded-lg flex items-center justify-center text-gray-500 hover:text-red-400 transition-all">
+                          <Trash2 size={13} />
+                        </button>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3 hidden sm:table-cell">
-                    <span className={`text-xs px-2 py-0.5 rounded capitalize font-medium ${categoryColor[p.category] || 'text-gray-400 bg-gray-800'}`}>
-                      {p.category}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-orange-400 font-semibold">₹{p.price}</td>
-                  <td className="px-5 py-3 text-gray-400 hidden md:table-cell">{p.minQty} pcs</td>
-                  <td className="px-5 py-3 hidden lg:table-cell">
-                    {p.badge && <span className="text-xs bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded">{p.badge}</span>}
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-2 justify-end">
-                      <button onClick={() => openEdit(p)}
-                        className="w-8 h-8 bg-white/5 hover:bg-blue-500/10 border border-white/10 hover:border-blue-500/30 rounded-lg flex items-center justify-center text-gray-500 hover:text-blue-400 transition-all">
-                        <Pencil size={13} />
-                      </button>
-                      <button onClick={() => setDeleteConfirm(p.id)}
-                        className="w-8 h-8 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/30 rounded-lg flex items-center justify-center text-gray-500 hover:text-red-400 transition-all">
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -179,17 +202,14 @@ export default function AdminProducts() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {[
                   { key: 'name', label: 'Product Name', type: 'text' },
-                  { key: 'slug', label: 'Slug (URL)', type: 'text' },
-                  { key: 'price', label: 'Price (₹)', type: 'number' },
-                  { key: 'minQty', label: 'Min Quantity', type: 'number' },
+                  { key: 'minQty', label: 'Min Quantity', type: 'text', inputMode: 'numeric' },
                   { key: 'material', label: 'Material', type: 'text' },
-                  { key: 'weight', label: 'Weight/GSM', type: 'text' },
-                  { key: 'badge', label: 'Badge (optional)', type: 'text' },
                 ].map((field) => (
                   <div key={field.key}>
                     <label className="block text-gray-500 text-xs uppercase tracking-wide mb-1.5">{field.label}</label>
                     <input
                       type={field.type}
+                      inputMode={field.inputMode}
                       value={form[field.key]}
                       onChange={(e) => setForm({ ...form, [field.key]: e.target.value })}
                       className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50 transition-colors"
@@ -215,18 +235,27 @@ export default function AdminProducts() {
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50 transition-colors resize-none" />
               </div>
               <div>
-                <label className="block text-gray-500 text-xs uppercase tracking-wide mb-1.5">Features (one per line)</label>
-                <textarea rows={4} value={form.features}
-                  onChange={(e) => setForm({ ...form, features: e.target.value })}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50 transition-colors resize-none"
-                  placeholder="200 GSM Cotton&#10;Custom embroidery&#10;All sizes available" />
-              </div>
-              <div>
-                <label className="block text-gray-500 text-xs uppercase tracking-wide mb-1.5">Colors (comma separated)</label>
-                <input type="text" value={form.colors}
-                  onChange={(e) => setForm({ ...form, colors: e.target.value })}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50 transition-colors"
-                  placeholder="Black, White, Navy Blue, Red" />
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <label className="block text-gray-500 text-xs uppercase tracking-wide">Product Images</label>
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-gray-300 hover:border-orange-500/40 hover:text-orange-400 transition-colors">
+                    <ImagePlus size={14} /> Add Images
+                    <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageChange} />
+                  </label>
+                </div>
+                <p className="mb-3 text-[11px] text-gray-600">Upload one image or multiple images. The first image will be used as the main product image.</p>
+                {previewImages.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {previewImages.map((image, index) => (
+                      <div key={`${image}-${index}`} className="overflow-hidden rounded-xl border border-white/10 bg-[#1a1a1a]">
+                        <img src={image} alt={`Preview ${index + 1}`} className="h-24 w-full object-cover" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-white/10 p-4 text-center text-sm text-gray-600">
+                    No images chosen yet.
+                  </div>
+                )}
               </div>
             </div>
             <div className="p-6 border-t border-white/5 flex gap-3">
