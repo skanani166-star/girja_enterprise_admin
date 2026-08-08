@@ -1,20 +1,6 @@
 {
   "categories": [
     {
-      "id": "tshirts",
-      "name": "T-Shirts",
-      "slug": "tshirts",
-      "description": "Premium corporate t-shirts with custom branding",
-      "icon": "Shirt"
-    },
-    {
-      "id": "caps",
-      "name": "Caps & Hats",
-      "slug": "caps",
-      "description": "Stylish caps and hats for your team",
-      "icon": "HardHat"
-    },
-    {
       "id": "bags",
       "name": "Bags",
       "slug": "bags",

@@ -67,6 +67,12 @@ export default function AdminCategories() {
 
   const productCount = (catId: string) => products.filter(p => p.category === catId).length;
 
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this category?')) return;
+    await fetch(`/api/categories?id=${id}`, { method: 'DELETE' });
+    fetchData();
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
@@ -93,6 +99,10 @@ export default function AdminCategories() {
                 <button onClick={() => openEdit(cat)}
                   className="w-8 h-8 bg-white/5 hover:bg-blue-500/10 border border-white/10 rounded-lg flex items-center justify-center text-gray-500 hover:text-blue-400 transition-all">
                   <Pencil size={13} />
+                </button>
+                <button onClick={() => handleDelete(cat.id)}
+                  className="w-8 h-8 bg-white/5 hover:bg-red-500/10 border border-white/10 rounded-lg flex items-center justify-center text-gray-500 hover:text-red-400 transition-all">
+                  <Trash2 size={13} />
                 </button>
               </div>
             </div>

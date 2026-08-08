@@ -104,10 +104,15 @@ async function parseRequestBody(req: NextRequest) {
 function normalizePayload(body: any) {
   const images = Array.isArray(body.images) ? body.images : [];
   const image = typeof body.image === 'string' ? body.image : '';
+  const slug = body.slug || (body.name ? body.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : '');
 
   return {
-    ...body,
+    id: body.id,
+    name: body.name || '',
+    slug: body.slug || slug,
+    category: body.category || '',
     minQty: Number(body.minQty || 0),
+    description: body.description || '',
     images: images.filter(Boolean),
     image: images[0] || image || '',
   };

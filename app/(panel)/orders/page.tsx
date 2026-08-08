@@ -157,18 +157,10 @@ export default function AdminOrders() {
                 <p className="text-gray-500 text-xs uppercase tracking-wide mb-2 flex items-center gap-1"><MessageSquare size={10} />Message</p>
                 <p className="text-gray-300 text-sm leading-relaxed">{selected.message || '—'}</p>
               </div>
-              <div className="flex gap-2 pt-2">
-                <a href={`tel:${selected.phone}`}
-                  className="flex-1 flex items-center justify-center gap-2 border border-white/10 hover:border-orange-500/30 text-gray-300 hover:text-orange-400 py-2.5 rounded-lg text-sm transition-all">
-                  <Phone size={14} /> Call
-                </a>
-                <a href={`mailto:${selected.email}`}
-                  className="flex-1 flex items-center justify-center gap-2 border border-white/10 hover:border-orange-500/30 text-gray-300 hover:text-orange-400 py-2.5 rounded-lg text-sm transition-all">
-                  <Mail size={14} /> Email
-                </a>
+              <div className="pt-2">
                 <button onClick={() => updateStatus(selected.id, 'resolved')}
-                  className="flex-1 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-lg text-sm font-semibold transition-all">
-                  <CheckCircle2 size={14} /> Resolve
+                  className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-lg text-sm font-semibold transition-all">
+                  <CheckCircle2 size={14} /> Resolve Enquiry
                 </button>
               </div>
             </div>

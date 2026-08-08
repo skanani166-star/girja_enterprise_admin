@@ -8,7 +8,6 @@ const emptyForm = {
   category: 'tshirts',
   minQty: '',
   description: '',
-  material: '',
   image: '',
   images: [] as string[],
 };
@@ -78,11 +77,10 @@ export default function AdminProducts() {
     const formData = new FormData();
 
     formData.append('id', form.id || '');
-    formData.append('name', form.name);
-    formData.append('category', form.category);
+    formData.append('name', form.name || '');
+    formData.append('category', form.category || '');
     formData.append('minQty', String(Number(form.minQty || 0)));
     formData.append('description', form.description || '');
-    formData.append('material', form.material || '');
     formData.append('image', form.image || '');
     formData.append('existingImages', JSON.stringify(form.images || []));
     selectedFiles.forEach((file) => formData.append('newImages', file));
@@ -200,23 +198,26 @@ export default function AdminProducts() {
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {[
-                  { key: 'name', label: 'Product Name', type: 'text' },
-                  { key: 'minQty', label: 'Min Quantity', type: 'text', inputMode: 'numeric' },
-                  { key: 'material', label: 'Material', type: 'text' },
-                ].map((field) => (
-                  <div key={field.key}>
-                    <label className="block text-gray-500 text-xs uppercase tracking-wide mb-1.5">{field.label}</label>
-                    <input
-                      type={field.type}
-                      inputMode={field.inputMode}
-                      value={form[field.key]}
-                      onChange={(e) => setForm({ ...form, [field.key]: e.target.value })}
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50 transition-colors"
-                    />
-                  </div>
-                ))}
                 <div>
+                  <label className="block text-gray-500 text-xs uppercase tracking-wide mb-1.5">Product Name</label>
+                  <input
+                    type="text"
+                    value={form.name || ''}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-500 text-xs uppercase tracking-wide mb-1.5">Min Quantity</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={form.minQty || ''}
+                    onChange={(e) => setForm({ ...form, minQty: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50 transition-colors"
+                  />
+                </div>
+                <div className="sm:col-span-2">
                   <label className="block text-gray-500 text-xs uppercase tracking-wide mb-1.5">Category</label>
                   <select
                     value={form.category}
@@ -230,7 +231,7 @@ export default function AdminProducts() {
               </div>
               <div>
                 <label className="block text-gray-500 text-xs uppercase tracking-wide mb-1.5">Description</label>
-                <textarea rows={3} value={form.description}
+                <textarea rows={4} value={form.description || ''}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50 transition-colors resize-none" />
               </div>
