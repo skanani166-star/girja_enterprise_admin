@@ -12,6 +12,44 @@ const emptyForm = {
   images: [] as string[],
 };
 
+function compressImageFile(file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.75): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const src = event.target?.result as string;
+      if (!src) return resolve('');
+      const img = new Image();
+      img.src = src;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width / height > maxWidth / maxHeight) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedDataUrl);
+      };
+      img.onerror = () => resolve(src);
+    };
+    reader.onerror = () => resolve('');
+  });
+}
+
 export default function AdminProducts() {
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -21,8 +59,8 @@ export default function AdminProducts() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const fetchProducts = () => {
     setLoading(true);
@@ -40,10 +78,9 @@ export default function AdminProducts() {
   useEffect(() => { fetchProducts(); }, []);
 
   const openAdd = () => {
-    const defaultCat = categories.length > 0 ? categories[0].id : 'tshirts';
+    const defaultCat = categories.length > 0 ? categories[0].id : '';
     setForm({ ...emptyForm, category: defaultCat, images: [] });
     setEditing(false);
-    setSelectedFiles([]);
     setPreviewImages([]);
     setShowForm(true);
   };
@@ -61,64 +98,61 @@ export default function AdminProducts() {
       images: existingImages,
     });
     setEditing(true);
-    setSelectedFiles([]);
     setPreviewImages(existingImages);
     setShowForm(true);
   };
 
-  const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
 
-    setSelectedFiles(prev => [...prev, ...files]);
-    setPreviewImages(prev => [...prev, ...files.map((file) => URL.createObjectURL(file))]);
+    setUploadingImage(true);
+    const compressedResults = await Promise.all(
+      files.map((file) => compressImageFile(file))
+    );
+
+    const validImages = compressedResults.filter(Boolean);
+    setPreviewImages(prev => [...prev, ...validImages]);
+    setUploadingImage(false);
     event.target.value = '';
   };
 
   const handleRemoveImage = (index: number) => {
-    const existingCount = (form.images || []).length;
-
-    if (index < existingCount) {
-      const updatedExisting = [...(form.images || [])];
-      updatedExisting.splice(index, 1);
-      setForm({
-        ...form,
-        images: updatedExisting,
-        image: updatedExisting[0] || '',
-      });
-    } else {
-      const newFileIndex = index - existingCount;
-      setSelectedFiles(prev => prev.filter((_, i) => i !== newFileIndex));
-    }
-
     setPreviewImages(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSave = async () => {
     if (!form.name.trim()) return;
     setSaving(true);
-    const formData = new FormData();
 
-    formData.append('id', form.id || '');
-    formData.append('name', form.name || '');
-    formData.append('category', form.category || (categories[0]?.id || 'general'));
-    formData.append('minQty', String(Number(form.minQty || 0)));
-    formData.append('description', form.description || '');
-    formData.append('image', form.images?.[0] || form.image || '');
-    formData.append('existingImages', JSON.stringify(form.images || []));
-    selectedFiles.forEach((file) => formData.append('newImages', file));
+    const selectedCategory = form.category || (categories[0]?.id || 'general');
+
+    const payload = {
+      id: form.id || `prod_${Date.now()}`,
+      name: form.name.trim(),
+      category: selectedCategory,
+      minQty: Number(form.minQty || 0),
+      description: form.description || '',
+      images: previewImages,
+      image: previewImages[0] || '',
+    };
 
     const method = editing ? 'PUT' : 'POST';
-    await fetch('/api/products', {
+    const res = await fetch('/api/products', {
       method,
-      body: formData,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
 
-    setSaving(false);
-    setShowForm(false);
-    setSelectedFiles([]);
-    setPreviewImages([]);
-    fetchProducts();
+    if (res.ok) {
+      setSaving(false);
+      setShowForm(false);
+      setPreviewImages([]);
+      fetchProducts();
+    } else {
+      setSaving(false);
+      alert('Failed to save product. Please check fields and try again.');
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -160,11 +194,12 @@ export default function AdminProducts() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
-                <tr><td colSpan={4} className="text-center py-12 text-gray-600">Loading...</td></tr>
+                <tr><td colSpan={4} className="text-center py-12 text-gray-600">Loading products...</td></tr>
               ) : products.length === 0 ? (
                 <tr><td colSpan={4} className="text-center py-12 text-gray-600">No products yet</td></tr>
               ) : products.map((p) => {
                 const mainImage = Array.isArray(p.images) && p.images.length ? p.images[0] : p.image || '';
+                const categoryObj = categories.find(c => c.id === p.category);
                 return (
                   <tr key={p.id} className="hover:bg-white/2 transition-colors">
                     <td className="px-5 py-3">
@@ -183,10 +218,10 @@ export default function AdminProducts() {
                     </td>
                     <td className="px-5 py-3 hidden sm:table-cell">
                       <span className={`text-xs px-2 py-0.5 rounded capitalize font-medium ${categoryColor[p.category] || 'text-gray-400 bg-gray-800'}`}>
-                        {categories.find(c => c.id === p.category)?.name || p.category}
+                        {categoryObj?.name || p.category}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-gray-400 hidden md:table-cell">{p.minQty} pcs</td>
+                    <td className="px-5 py-3 text-gray-400 hidden md:table-cell">{p.minQty || 0} pcs</td>
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2 justify-end">
                         <button onClick={() => openEdit(p)}
@@ -227,6 +262,7 @@ export default function AdminProducts() {
                     type="text"
                     value={form.name || ''}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder="e.g. Dry-Fit T-Shirt"
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50 transition-colors"
                   />
                 </div>
@@ -237,6 +273,7 @@ export default function AdminProducts() {
                     inputMode="numeric"
                     value={form.minQty || ''}
                     onChange={(e) => setForm({ ...form, minQty: e.target.value })}
+                    placeholder="e.g. 30"
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50 transition-colors"
                   />
                 </div>
@@ -246,9 +283,13 @@ export default function AdminProducts() {
                     value={form.category}
                     onChange={(e) => setForm({ ...form, category: e.target.value })}
                     className="w-full bg-[#1a1a1a] border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50 transition-colors">
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
+                    {categories.length === 0 ? (
+                      <option value="">No categories available - Please add a category first</option>
+                    ) : (
+                      categories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>
@@ -256,17 +297,18 @@ export default function AdminProducts() {
                 <label className="block text-gray-500 text-xs uppercase tracking-wide mb-1.5">Description</label>
                 <textarea rows={4} value={form.description || ''}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  placeholder="Product description..."
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50 transition-colors resize-none" />
               </div>
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <label className="block text-gray-500 text-xs uppercase tracking-wide">Product Images</label>
                   <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-gray-300 hover:border-orange-500/40 hover:text-orange-400 transition-colors">
-                    <ImagePlus size={14} /> Add Images
-                    <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageChange} />
+                    <ImagePlus size={14} /> {uploadingImage ? 'Processing...' : 'Add Images'}
+                    <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageChange} disabled={uploadingImage} />
                   </label>
                 </div>
-                <p className="mb-3 text-[11px] text-gray-600">Upload one image or multiple images. Click the red ✕ button on any image to remove it.</p>
+                <p className="mb-3 text-[11px] text-gray-600">Upload one or more images. Click the red ✕ button to delete any image.</p>
                 {previewImages.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {previewImages.map((image, index) => (
@@ -294,7 +336,7 @@ export default function AdminProducts() {
                   </div>
                 ) : (
                   <div className="rounded-xl border border-dashed border-white/10 p-4 text-center text-sm text-gray-600">
-                    No images chosen yet.
+                    {uploadingImage ? 'Processing images...' : 'No images chosen yet.'}
                   </div>
                 )}
               </div>
@@ -304,7 +346,7 @@ export default function AdminProducts() {
                 className="flex-1 border border-white/10 text-gray-400 hover:text-white py-2.5 rounded-lg text-sm font-medium transition-all">
                 Cancel
               </button>
-              <button onClick={handleSave} disabled={saving || !form.name.trim()}
+              <button onClick={handleSave} disabled={saving || !form.name.trim() || uploadingImage}
                 className="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white py-2.5 rounded-lg text-sm font-semibold transition-all">
                 <Save size={14} /> {saving ? 'Saving...' : 'Save Product'}
               </button>
