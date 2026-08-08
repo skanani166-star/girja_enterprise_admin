@@ -7,7 +7,7 @@ export default function AdminCategories() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ id: '', name: '', slug: '', description: '', icon: 'FolderOpen' });
+  const [form, setForm] = useState({ id: '', name: '', description: '' });
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -27,7 +27,7 @@ export default function AdminCategories() {
   useEffect(() => { fetchData(); }, []);
 
   const openAdd = () => {
-    setForm({ id: '', name: '', slug: '', description: '', icon: 'FolderOpen' });
+    setForm({ id: '', name: '', description: '' });
     setEditing(false);
     setShowForm(true);
   };
@@ -36,9 +36,7 @@ export default function AdminCategories() {
     setForm({
       id: cat.id || '',
       name: cat.name || '',
-      slug: cat.slug || '',
       description: cat.description || '',
-      icon: cat.icon || 'FolderOpen',
     });
     setEditing(true);
     setShowForm(true);
@@ -47,10 +45,13 @@ export default function AdminCategories() {
   const handleSave = async () => {
     if (!form.name.trim()) return;
     setSaving(true);
+    const slug = form.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     const payload = {
-      ...form,
-      id: form.id || form.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_'),
-      slug: form.slug || form.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-'),
+      id: form.id || slug.replace(/-/g, '_') || `cat_${Date.now()}`,
+      name: form.name.trim(),
+      slug: slug || 'category',
+      description: form.description.trim(),
+      icon: 'FolderOpen',
     };
 
     await fetch('/api/categories', {
@@ -87,7 +88,7 @@ export default function AdminCategories() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
-          <div className="col-span-3 text-center py-12 text-gray-600">Loading...</div>
+          <div className="col-span-3 text-center py-12 text-gray-600">Loading categories...</div>
         ) : categories.length === 0 ? (
           <div className="col-span-3 text-center py-12 text-gray-600">No categories found</div>
         ) : categories.map((cat) => (
@@ -111,7 +112,6 @@ export default function AdminCategories() {
             <p className="text-gray-500 text-sm leading-relaxed mb-4">{cat.description || 'No description provided.'}</p>
             <div className="flex items-center justify-between">
               <span className="text-gray-600 text-xs">{productCount(cat.id)} products</span>
-              <span className="text-gray-700 text-xs font-mono">{cat.slug}</span>
             </div>
           </div>
         ))}
@@ -136,17 +136,10 @@ export default function AdminCategories() {
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50 transition-colors" />
               </div>
               <div>
-                <label className="block text-gray-500 text-xs uppercase tracking-wide mb-1.5">Slug</label>
-                <input type="text" value={form.slug}
-                  onChange={(e) => setForm({ ...form, slug: e.target.value })}
-                  placeholder="e.g. tshirts"
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50 transition-colors" />
-              </div>
-              <div>
                 <label className="block text-gray-500 text-xs uppercase tracking-wide mb-1.5">Description</label>
-                <textarea rows={3} value={form.description}
+                <textarea rows={4} value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Category description..."
+                  placeholder="Enter category description..."
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50 transition-colors resize-none" />
               </div>
             </div>
