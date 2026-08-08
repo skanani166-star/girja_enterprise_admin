@@ -7,15 +7,17 @@ export default function AdminOrders() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [selected, setSelected] = useState<any | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const fetchContacts = () => {
     setLoading(true);
-    fetch('/api/contact')
+    fetch('/api/contact', { cache: 'no-store' })
       .then(r => r.json())
       .then(data => {
         setContacts(Array.isArray(data) ? data : []);
         setLoading(false);
-      });
+      })
+      .catch(() => setLoading(false));
   };
 
   useEffect(() => { fetchContacts(); }, []);
@@ -30,6 +32,13 @@ export default function AdminOrders() {
     if (selected?.id === id) setSelected({ ...selected, status });
   };
 
+  const handleDelete = async (id: string) => {
+    await fetch(`/api/contact?id=${id}`, { method: 'DELETE' });
+    setDeleteConfirm(null);
+    if (selected?.id === id) setSelected(null);
+    fetchContacts();
+  };
+
   const filtered = filter === 'all' ? contacts : contacts.filter(c => c.status === filter);
 
   const statusConfig: Record<string, { label: string; cls: string }> = {
@@ -41,7 +50,7 @@ export default function AdminOrders() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="font-display text-4xl text-white mb-1">ENQUIRIES</h1>
+        <h1 className="font-display text-4xl text-white mb-1">ENQUIRIES & QUOTES</h1>
         <p className="text-gray-500 text-sm">{contacts.filter(c => c.status === 'new').length} new enquiries</p>
       </div>
 
@@ -77,7 +86,7 @@ export default function AdminOrders() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
-                <tr><td colSpan={5} className="text-center py-12 text-gray-600">Loading...</td></tr>
+                <tr><td colSpan={5} className="text-center py-12 text-gray-600">Loading enquiries...</td></tr>
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={5} className="text-center py-12 text-gray-600">No enquiries found</td></tr>
               ) : filtered.map((c) => (
@@ -95,23 +104,29 @@ export default function AdminOrders() {
                   </td>
                   <td className="px-5 py-3 text-gray-400 hidden md:table-cell">{c.company || '—'}</td>
                   <td className="px-5 py-3 text-gray-500 hidden lg:table-cell text-xs">
-                    {new Date(c.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                    {c.createdAt ? new Date(c.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
                   </td>
                   <td className="px-5 py-3">
                     <select
                       value={c.status}
                       onChange={(e) => updateStatus(c.id, e.target.value)}
-                      className={`text-xs px-2 py-1 rounded border bg-transparent font-medium cursor-pointer focus:outline-none ${statusConfig[c.status]?.cls || 'text-gray-400 border-gray-700'}`}>
+                      className={`text-xs px-2 py-1 rounded border bg-[#111] font-medium cursor-pointer focus:outline-none ${statusConfig[c.status]?.cls || 'text-gray-400 border-gray-700'}`}>
                       <option value="new">New</option>
                       <option value="inprogress">In Progress</option>
                       <option value="resolved">Resolved</option>
                     </select>
                   </td>
                   <td className="px-5 py-3">
-                    <button onClick={() => setSelected(c)}
-                      className="w-8 h-8 bg-white/5 hover:bg-orange-500/10 border border-white/10 hover:border-orange-500/30 rounded-lg flex items-center justify-center text-gray-500 hover:text-orange-400 transition-all">
-                      <Eye size={13} />
-                    </button>
+                    <div className="flex items-center gap-2 justify-end">
+                      <button onClick={() => setSelected(c)}
+                        className="w-8 h-8 bg-white/5 hover:bg-orange-500/10 border border-white/10 hover:border-orange-500/30 rounded-lg flex items-center justify-center text-gray-500 hover:text-orange-400 transition-all">
+                        <Eye size={13} />
+                      </button>
+                      <button onClick={() => setDeleteConfirm(c.id)}
+                        className="w-8 h-8 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/30 rounded-lg flex items-center justify-center text-gray-500 hover:text-red-400 transition-all">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -145,7 +160,7 @@ export default function AdminOrders() {
                   { icon: Mail, label: 'Email', value: selected.email },
                   { icon: Phone, label: 'Phone', value: selected.phone || '—' },
                   { icon: Building2, label: 'Company', value: selected.company || '—' },
-                  { icon: Clock, label: 'Date', value: new Date(selected.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) },
+                  { icon: Clock, label: 'Date', value: selected.createdAt ? new Date(selected.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—' },
                 ].map((item, i) => (
                   <div key={i} className="bg-white/3 rounded-xl p-3">
                     <p className="text-gray-600 text-xs flex items-center gap-1 mb-1"><item.icon size={10} />{item.label}</p>
@@ -157,12 +172,29 @@ export default function AdminOrders() {
                 <p className="text-gray-500 text-xs uppercase tracking-wide mb-2 flex items-center gap-1"><MessageSquare size={10} />Message</p>
                 <p className="text-gray-300 text-sm leading-relaxed">{selected.message || '—'}</p>
               </div>
-              <div className="pt-2">
+              <div className="pt-2 flex gap-3">
                 <button onClick={() => updateStatus(selected.id, 'resolved')}
-                  className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-lg text-sm font-semibold transition-all">
+                  className="flex-1 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-lg text-sm font-semibold transition-all">
                   <CheckCircle2 size={14} /> Resolve Enquiry
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-[#111] border border-red-500/20 rounded-2xl p-6 max-w-sm w-full text-center">
+            <Trash2 size={32} className="text-red-400 mx-auto mb-3" />
+            <h3 className="text-white font-semibold mb-2">Delete Enquiry?</h3>
+            <p className="text-gray-500 text-sm mb-5">This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)}
+                className="flex-1 border border-white/10 text-gray-400 py-2 rounded-lg text-sm">Cancel</button>
+              <button onClick={() => handleDelete(deleteConfirm)}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg text-sm font-semibold transition-all">Delete</button>
             </div>
           </div>
         </div>

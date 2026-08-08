@@ -1,37 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import path from 'path';
+import { fetchContacts, saveContacts, ContactEntry } from '@/lib/data-store';
 
-const candidatePaths = [
-  path.join(process.cwd(), 'data', 'contacts.json'),
-  path.resolve(process.cwd(), '..', 'girja_enterprise', 'data', 'contacts.json'),
-  path.resolve(process.cwd(), '..', '..', 'girja_enterprise', 'data', 'contacts.json'),
-];
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-function getContacts(): any[] {
-  for (const p of candidatePaths) {
-    if (existsSync(p)) {
-      try {
-        const data = JSON.parse(readFileSync(p, 'utf-8'));
-        return Array.isArray(data) ? data : [];
-      } catch {}
-    }
-  }
-  return [];
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  };
 }
 
-function saveContactsToAll(contacts: any[]) {
-  for (const p of candidatePaths) {
-    try {
-      const dir = path.dirname(p);
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-      writeFileSync(p, JSON.stringify(contacts, null, 2));
-    } catch {}
-  }
+export async function OPTIONS() {
+  return NextResponse.json({}, { headers: corsHeaders() });
 }
 
 export async function GET() {
-  return NextResponse.json(getContacts());
+  const contacts = await fetchContacts();
+  return NextResponse.json(contacts, { headers: corsHeaders() });
 }
 
 export async function POST(req: NextRequest) {
@@ -42,46 +30,41 @@ export async function POST(req: NextRequest) {
     if (!email) {
       return NextResponse.json(
         { error: 'Email address is required.' },
-        { status: 400 }
+        { status: 400, headers: corsHeaders() }
       );
     }
 
-    const contacts = getContacts();
+    const contacts = await fetchContacts();
 
-    // Check if email already exists
-    const existing = contacts.find(
-      (c: any) => (c.email || '').trim().toLowerCase() === email
+    // Check if quote ID or exact email entry already exists
+    const existingIdx = contacts.findIndex(
+      (c: any) => c.id === body.id || (c.email || '').trim().toLowerCase() === email
     );
 
-    if (existing) {
-      return NextResponse.json(
-        {
-          error:
-            'A quote request has already been submitted using this email address.',
-        },
-        { status: 400 }
-      );
-    }
-
-    const entry = {
-      id: `contact_${Date.now()}`,
+    const entry: ContactEntry = {
+      id: body.id || `contact_${Date.now()}`,
       name: body.name || 'Anonymous',
       email: email,
       phone: body.phone || '',
       company: body.company || '',
       message: body.message || '',
-      createdAt: new Date().toISOString(),
-      status: 'new',
+      createdAt: body.createdAt || new Date().toISOString(),
+      status: body.status || 'new',
     };
 
-    contacts.unshift(entry);
-    saveContactsToAll(contacts);
+    if (existingIdx !== -1) {
+      contacts[existingIdx] = { ...contacts[existingIdx], ...entry };
+    } else {
+      contacts.unshift(entry);
+    }
 
-    return NextResponse.json({ success: true, contact: entry });
+    await saveContacts(contacts);
+
+    return NextResponse.json({ success: true, contact: entry }, { headers: corsHeaders() });
   } catch (err) {
     return NextResponse.json(
       { error: 'Failed to save contact' },
-      { status: 500 }
+      { status: 500, headers: corsHeaders() }
     );
   }
 }
@@ -89,14 +72,30 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const { id, status } = await req.json();
-    const contacts = getContacts();
+    const contacts = await fetchContacts();
     const idx = contacts.findIndex((c: any) => c.id === id);
     if (idx !== -1) {
       contacts[idx].status = status;
-      saveContactsToAll(contacts);
+      await saveContacts(contacts);
     }
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true }, { headers: corsHeaders() });
   } catch {
-    return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to update' }, { status: 500, headers: corsHeaders() });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'Contact ID required' }, { status: 400, headers: corsHeaders() });
+
+    let contacts = await fetchContacts();
+    contacts = contacts.filter((c: any) => c.id !== id);
+    await saveContacts(contacts);
+
+    return NextResponse.json({ success: true }, { headers: corsHeaders() });
+  } catch {
+    return NextResponse.json({ error: 'Failed to delete contact' }, { status: 500, headers: corsHeaders() });
   }
 }

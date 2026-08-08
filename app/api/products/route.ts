@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
+import { fetchProductsData, saveProductsData, ProductsData } from '@/lib/data-store';
 
-const dataPath = path.join(process.cwd(), 'data', 'products.json');
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const uploadDir = path.join(process.cwd(), 'public', 'uploads');
 
-function getData() {
-  return JSON.parse(readFileSync(dataPath, 'utf-8'));
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  };
 }
 
-function saveData(data: any) {
-  writeFileSync(dataPath, JSON.stringify(data, null, 2));
+export async function OPTIONS() {
+  return NextResponse.json({}, { headers: corsHeaders() });
 }
 
 function ensureUploadDir() {
@@ -45,17 +53,25 @@ function parseStringArray(value: any) {
 }
 
 async function saveUploadedFiles(files: File[]) {
-  ensureUploadDir();
   const uploadedPaths: string[] = [];
 
   for (let index = 0; index < files.length; index += 1) {
     const file = files[index];
-    const extension = path.extname(file.name || 'image');
-    const fileName = `${Date.now()}-${index}-${sanitizeFileName(file.name || 'image') || 'image'}${extension}`;
-    const filePath = path.join(uploadDir, fileName);
     const buffer = Buffer.from(await file.arrayBuffer());
-    writeFileSync(filePath, buffer);
-    uploadedPaths.push(`/uploads/${fileName}`);
+
+    try {
+      ensureUploadDir();
+      const extension = path.extname(file.name || 'image') || '.jpg';
+      const fileName = `${Date.now()}-${index}-${sanitizeFileName(file.name || 'image')}${extension}`;
+      const filePath = path.join(uploadDir, fileName);
+      writeFileSync(filePath, buffer);
+      uploadedPaths.push(`/uploads/${fileName}`);
+    } catch (err) {
+      // In serverless / read-only filesystem environments, fall back to Data URL
+      const mime = file.type || 'image/jpeg';
+      const base64 = buffer.toString('base64');
+      uploadedPaths.push(`data:${mime};base64,${base64}`);
+    }
   }
 
   return uploadedPaths;
@@ -74,11 +90,7 @@ async function parseRequestBody(req: NextRequest) {
     let entry = entries.next();
     while (!entry.done) {
       const [key, value] = entry.value;
-      if (key === 'newImages') {
-        entry = entries.next();
-        continue;
-      }
-      if (key === 'existingImages') {
+      if (key === 'newImages' || key === 'existingImages') {
         entry = entries.next();
         continue;
       }
@@ -102,7 +114,7 @@ async function parseRequestBody(req: NextRequest) {
 }
 
 function normalizePayload(body: any) {
-  const images = Array.isArray(body.images) ? body.images : [];
+  const images = Array.isArray(body.images) ? body.images : body.image ? [body.image] : [];
   const image = typeof body.image === 'string' ? body.image : '';
   const slug = body.slug || (body.name ? body.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : '');
 
@@ -121,39 +133,39 @@ function normalizePayload(body: any) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const category = searchParams.get('category');
-  const data = getData();
+  const data = await fetchProductsData();
 
   const products = category
     ? data.products.filter((p: any) => p.category === category)
     : data.products;
 
-  return NextResponse.json({ products, categories: data.categories });
+  return NextResponse.json({ products, categories: data.categories }, { headers: corsHeaders() });
 }
 
 export async function POST(req: NextRequest) {
   try {
     const { body } = await parseRequestBody(req);
-    const data = getData();
-    const newProduct = normalizePayload({ ...body, id: `prod_${Date.now()}` });
-    data.products.push(newProduct);
-    saveData(data);
-    return NextResponse.json({ success: true, product: newProduct });
+    const data = await fetchProductsData();
+    const newProduct = normalizePayload({ ...body, id: body.id || `prod_${Date.now()}` });
+    data.products.unshift(newProduct);
+    await saveProductsData(data);
+    return NextResponse.json({ success: true, product: newProduct }, { headers: corsHeaders() });
   } catch (err) {
-    return NextResponse.json({ error: 'Failed to create product' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create product' }, { status: 500, headers: corsHeaders() });
   }
 }
 
 export async function PUT(req: NextRequest) {
   try {
     const { body } = await parseRequestBody(req);
-    const data = getData();
+    const data = await fetchProductsData();
     const idx = data.products.findIndex((p: any) => p.id === body.id);
-    if (idx === -1) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    data.products[idx] = normalizePayload(body);
-    saveData(data);
-    return NextResponse.json({ success: true });
+    if (idx === -1) return NextResponse.json({ error: 'Not found' }, { status: 404, headers: corsHeaders() });
+    data.products[idx] = normalizePayload({ ...data.products[idx], ...body });
+    await saveProductsData(data);
+    return NextResponse.json({ success: true, product: data.products[idx] }, { headers: corsHeaders() });
   } catch (err) {
-    return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to update' }, { status: 500, headers: corsHeaders() });
   }
 }
 
@@ -161,11 +173,12 @@ export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
-    const data = getData();
+    if (!id) return NextResponse.json({ error: 'Product ID required' }, { status: 400, headers: corsHeaders() });
+    const data = await fetchProductsData();
     data.products = data.products.filter((p: any) => p.id !== id);
-    saveData(data);
-    return NextResponse.json({ success: true });
+    await saveProductsData(data);
+    return NextResponse.json({ success: true }, { headers: corsHeaders() });
   } catch (err) {
-    return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to delete' }, { status: 500, headers: corsHeaders() });
   }
 }

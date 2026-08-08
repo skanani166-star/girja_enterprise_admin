@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Package, MessageSquare, CheckCircle2, AlertCircle, Clock, Plus, ArrowRight } from 'lucide-react';
+import { Package, MessageSquare, CheckCircle2, AlertCircle, Clock, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminPage() {
@@ -10,13 +10,13 @@ export default function AdminPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/contact').then(r => r.json()),
-      fetch('/api/products').then(r => r.json()),
+      fetch('/api/contact', { cache: 'no-store' }).then(r => r.json()).catch(() => []),
+      fetch('/api/products', { cache: 'no-store' }).then(r => r.json()).catch(() => ({ products: [] })),
     ]).then(([c, p]) => {
       setContacts(Array.isArray(c) ? c : []);
       setProducts(p.products || []);
       setLoading(false);
-    });
+    }).catch(() => setLoading(false));
   }, []);
 
   const newEnquiries = contacts.filter(c => c.status === 'new').length;
@@ -31,15 +31,9 @@ export default function AdminPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="font-display text-4xl text-white mb-1">DASHBOARD</h1>
-          <p className="text-gray-500 text-sm">Welcome back! Here's your store overview.</p>
-        </div>
-        <Link href="/products"
-          className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-all uppercase tracking-wide">
-          <Plus size={14} /> Add Product
-        </Link>
+      <div className="mb-8">
+        <h1 className="font-display text-4xl text-white mb-1">DASHBOARD</h1>
+        <p className="text-gray-500 text-sm">Welcome back! Here's your store overview.</p>
       </div>
 
       {/* Stats */}
@@ -87,7 +81,7 @@ export default function AdminPage() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-2">
                     <span className="text-gray-600 text-xs hidden sm:flex items-center gap-1">
-                      <Clock size={10} /> {new Date(c.createdAt).toLocaleDateString('en-IN')}
+                      <Clock size={10} /> {c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-IN') : '—'}
                     </span>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       c.status === 'new' ? 'bg-yellow-500/10 text-yellow-400' :
@@ -101,7 +95,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Products overview */}
+        {/* Recent Products */}
         <div className="bg-[#111] border border-white/5 rounded-2xl overflow-hidden">
           <div className="p-5 border-b border-white/5 flex items-center justify-between">
             <h2 className="text-white font-semibold text-sm uppercase tracking-wide">Products</h2>
@@ -115,22 +109,24 @@ export default function AdminPage() {
             ) : products.length === 0 ? (
               <div className="p-8 text-center text-gray-600 text-sm">No products yet</div>
             ) : (
-              products.slice(0, 5).map((p) => (
-                <div key={p.id} className="flex items-center justify-between px-5 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-blue-500/10 rounded-lg flex items-center justify-center shrink-0">
-                      <Package size={14} className="text-blue-400" />
-                    </div>
-                    <div className="min-w-0">
+              products.slice(0, 5).map((p) => {
+                const mainImage = Array.isArray(p.images) && p.images.length ? p.images[0] : p.image || '';
+                return (
+                  <div key={p.id} className="flex items-center justify-between px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-[#1a1a1a] rounded-lg overflow-hidden shrink-0 flex items-center justify-center">
+                        {mainImage ? (
+                          <img src={mainImage} alt={p.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <Package size={14} className="text-gray-600" />
+                        )}
+                      </div>
                       <p className="text-white text-sm font-medium truncate">{p.name}</p>
-                      <p className="text-gray-600 text-xs capitalize">{p.category}</p>
                     </div>
+                    <span className="text-gray-500 text-xs uppercase tracking-wide">{p.category}</span>
                   </div>
-                  <div className="shrink-0 ml-2 text-right">
-                    <p className="text-gray-600 text-xs">Min {p.minQty} pcs</p>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

@@ -5,7 +5,7 @@ import { Plus, Pencil, Trash2, X, Save, Package, ImagePlus } from 'lucide-react'
 const emptyForm = {
   id: '',
   name: '',
-  category: 'tshirts',
+  category: '',
   minQty: '',
   description: '',
   image: '',
@@ -26,19 +26,22 @@ export default function AdminProducts() {
 
   const fetchProducts = () => {
     setLoading(true);
-    fetch('/api/products')
+    fetch('/api/products', { cache: 'no-store' })
       .then(r => r.json())
       .then(data => {
+        const cats = data.categories || [];
+        setCategories(cats);
         setProducts(data.products || []);
-        setCategories(data.categories || []);
         setLoading(false);
-      });
+      })
+      .catch(() => setLoading(false));
   };
 
   useEffect(() => { fetchProducts(); }, []);
 
   const openAdd = () => {
-    setForm({ ...emptyForm, images: [] });
+    const defaultCat = categories.length > 0 ? categories[0].id : 'tshirts';
+    setForm({ ...emptyForm, category: defaultCat, images: [] });
     setEditing(false);
     setSelectedFiles([]);
     setPreviewImages([]);
@@ -72,16 +75,36 @@ export default function AdminProducts() {
     event.target.value = '';
   };
 
+  const handleRemoveImage = (index: number) => {
+    const existingCount = (form.images || []).length;
+
+    if (index < existingCount) {
+      const updatedExisting = [...(form.images || [])];
+      updatedExisting.splice(index, 1);
+      setForm({
+        ...form,
+        images: updatedExisting,
+        image: updatedExisting[0] || '',
+      });
+    } else {
+      const newFileIndex = index - existingCount;
+      setSelectedFiles(prev => prev.filter((_, i) => i !== newFileIndex));
+    }
+
+    setPreviewImages(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSave = async () => {
+    if (!form.name.trim()) return;
     setSaving(true);
     const formData = new FormData();
 
     formData.append('id', form.id || '');
     formData.append('name', form.name || '');
-    formData.append('category', form.category || '');
+    formData.append('category', form.category || (categories[0]?.id || 'general'));
     formData.append('minQty', String(Number(form.minQty || 0)));
     formData.append('description', form.description || '');
-    formData.append('image', form.image || '');
+    formData.append('image', form.images?.[0] || form.image || '');
     formData.append('existingImages', JSON.stringify(form.images || []));
     selectedFiles.forEach((file) => formData.append('newImages', file));
 
@@ -160,7 +183,7 @@ export default function AdminProducts() {
                     </td>
                     <td className="px-5 py-3 hidden sm:table-cell">
                       <span className={`text-xs px-2 py-0.5 rounded capitalize font-medium ${categoryColor[p.category] || 'text-gray-400 bg-gray-800'}`}>
-                        {p.category}
+                        {categories.find(c => c.id === p.category)?.name || p.category}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-gray-400 hidden md:table-cell">{p.minQty} pcs</td>
@@ -243,12 +266,29 @@ export default function AdminProducts() {
                     <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageChange} />
                   </label>
                 </div>
-                <p className="mb-3 text-[11px] text-gray-600">Upload one image or multiple images. The first image will be used as the main product image.</p>
+                <p className="mb-3 text-[11px] text-gray-600">Upload one image or multiple images. Click the red ✕ button on any image to remove it.</p>
                 {previewImages.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {previewImages.map((image, index) => (
-                      <div key={`${image}-${index}`} className="overflow-hidden rounded-xl border border-white/10 bg-[#1a1a1a]">
+                      <div key={`${image}-${index}`} className="relative group overflow-hidden rounded-xl border border-white/10 bg-[#1a1a1a]">
                         <img src={image} alt={`Preview ${index + 1}`} className="h-24 w-full object-cover" />
+                        
+                        {/* Remove image button */}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveImage(index)}
+                          className="absolute top-1.5 right-1.5 w-6 h-6 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-10 cursor-pointer"
+                          title="Delete image"
+                        >
+                          <X size={12} />
+                        </button>
+
+                        {/* Main image label */}
+                        {index === 0 && (
+                          <span className="absolute bottom-1.5 left-1.5 bg-orange-500/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs z-10 uppercase tracking-wider">
+                            Main
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -264,7 +304,7 @@ export default function AdminProducts() {
                 className="flex-1 border border-white/10 text-gray-400 hover:text-white py-2.5 rounded-lg text-sm font-medium transition-all">
                 Cancel
               </button>
-              <button onClick={handleSave} disabled={saving}
+              <button onClick={handleSave} disabled={saving || !form.name.trim()}
                 className="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white py-2.5 rounded-lg text-sm font-semibold transition-all">
                 <Save size={14} /> {saving ? 'Saving...' : 'Save Product'}
               </button>
