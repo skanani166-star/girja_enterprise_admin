@@ -12,7 +12,7 @@ const emptyForm = {
   images: [] as string[],
 };
 
-function compressImageFile(file: File, maxWidth = 350, maxHeight = 350, quality = 0.5): Promise<string> {
+function compressImageFile(file: File, maxWidth = 150, maxHeight = 150, quality = 0.3): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -36,10 +36,10 @@ function compressImageFile(file: File, maxWidth = 350, maxHeight = 350, quality 
           }
         }
 
-        canvas.width = width;
-        canvas.height = height;
+        canvas.width = Math.max(width, 1);
+        canvas.height = Math.max(height, 1);
         const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
+        ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
 
         const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
         resolve(compressedDataUrl);

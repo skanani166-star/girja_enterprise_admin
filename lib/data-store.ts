@@ -90,14 +90,14 @@ async function kvSet(key: string, value: any): Promise<boolean> {
   }
 }
 
-// Helper to strip giant base64 strings if cloud storage payload limit is hit
+// Helper to strip long base64 strings if cloud storage payload limit is hit
 function sanitizeDataForCloud(data: ProductsData): ProductsData {
   return {
     categories: Array.isArray(data.categories) ? data.categories : [],
     products: (Array.isArray(data.products) ? data.products : []).map(p => {
       const images = (Array.isArray(p.images) ? p.images : p.image ? [p.image] : []).map(img => {
-        if (typeof img === 'string' && img.length > 50000) {
-          // If image base64 is still huge (>50KB), keep placeholder / truncated
+        if (typeof img === 'string' && img.length > 700) {
+          // If image base64 exceeds restful-api.dev 700 char limit, sanitize
           return img.slice(0, 100) + '...';
         }
         return img;
@@ -126,6 +126,17 @@ export function getProductDataPath(): string {
 }
 
 export async function fetchProductsData(): Promise<ProductsData> {
+  // If memory cache already has valid products, prefer memory cache for speed & reliability
+  if (cachedProductsData && Array.isArray(cachedProductsData.products) && cachedProductsData.products.length > 0) {
+    // Background refresh from cloud/KV
+    kvGet<ProductsData>("girja_products_data").then(kvData => {
+      if (kvData && Array.isArray(kvData.products) && kvData.products.length >= (cachedProductsData?.products.length || 0)) {
+        cachedProductsData = kvData;
+      }
+    }).catch(() => {});
+    return cachedProductsData;
+  }
+
   // 1. Try Cloud KV
   const kvData = await kvGet<ProductsData>("girja_products_data");
   if (kvData && Array.isArray(kvData.products) && Array.isArray(kvData.categories)) {
