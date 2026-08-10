@@ -12,7 +12,7 @@ const emptyForm = {
   images: [] as string[],
 };
 
-function compressImageFile(file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.75): Promise<string> {
+function compressImageFile(file: File, maxWidth = 350, maxHeight = 350, quality = 0.5): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -78,7 +78,7 @@ export default function AdminProducts() {
   useEffect(() => { fetchProducts(); }, []);
 
   const openAdd = () => {
-    const defaultCat = categories.length > 0 ? categories[0].id : '';
+    const defaultCat = categories.length > 0 ? categories[0].id : 'general';
     setForm({ ...emptyForm, category: defaultCat, images: [] });
     setEditing(false);
     setPreviewImages([]);
@@ -94,6 +94,7 @@ export default function AdminProducts() {
 
     setForm({
       ...product,
+      category: product.category || (categories.length > 0 ? categories[0].id : 'general'),
       image: product.image || '',
       images: existingImages,
     });
@@ -138,20 +139,25 @@ export default function AdminProducts() {
     };
 
     const method = editing ? 'PUT' : 'POST';
-    const res = await fetch('/api/products', {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    try {
+      const res = await fetch('/api/products', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    if (res.ok) {
+      if (res.ok) {
+        setSaving(false);
+        setShowForm(false);
+        setPreviewImages([]);
+        fetchProducts();
+      } else {
+        setSaving(false);
+        alert('Failed to save product. Please check fields and try again.');
+      }
+    } catch (err) {
       setSaving(false);
-      setShowForm(false);
-      setPreviewImages([]);
-      fetchProducts();
-    } else {
-      setSaving(false);
-      alert('Failed to save product. Please check fields and try again.');
+      alert('Network error while saving product.');
     }
   };
 

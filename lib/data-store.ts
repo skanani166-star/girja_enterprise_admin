@@ -90,6 +90,27 @@ async function kvSet(key: string, value: any): Promise<boolean> {
   }
 }
 
+// Helper to strip giant base64 strings if cloud storage payload limit is hit
+function sanitizeDataForCloud(data: ProductsData): ProductsData {
+  return {
+    categories: Array.isArray(data.categories) ? data.categories : [],
+    products: (Array.isArray(data.products) ? data.products : []).map(p => {
+      const images = (Array.isArray(p.images) ? p.images : p.image ? [p.image] : []).map(img => {
+        if (typeof img === 'string' && img.length > 50000) {
+          // If image base64 is still huge (>50KB), keep placeholder / truncated
+          return img.slice(0, 100) + '...';
+        }
+        return img;
+      });
+      return {
+        ...p,
+        images,
+        image: images[0] || p.image || '',
+      };
+    })
+  };
+}
+
 // --- PRODUCTS & CATEGORIES DATA ---
 
 const candidateProductPaths = [
@@ -119,8 +140,10 @@ export async function fetchProductsData(): Promise<ProductsData> {
       const json = await res.json();
       const data = json.data || json;
       if (Array.isArray(data.products) && Array.isArray(data.categories)) {
-        cachedProductsData = data;
-        return data;
+        if (data.products.length > 0 || !cachedProductsData || cachedProductsData.products.length === 0) {
+          cachedProductsData = data;
+          return data;
+        }
       }
     }
   } catch (err) {
@@ -130,13 +153,16 @@ export async function fetchProductsData(): Promise<ProductsData> {
   // 3. Try reading local products.json file
   try {
     const targetPath = getProductDataPath();
-    const data = JSON.parse(readFileSync(targetPath, "utf-8"));
+    const fileContent = readFileSync(targetPath, "utf-8");
+    const data = JSON.parse(fileContent);
     const result: ProductsData = {
       categories: Array.isArray(data.categories) ? data.categories : [],
       products: Array.isArray(data.products) ? data.products : [],
     };
-    cachedProductsData = result;
-    return result;
+    if (result.products.length > 0 || !cachedProductsData) {
+      cachedProductsData = result;
+    }
+    return cachedProductsData || result;
   } catch {
     if (cachedProductsData) return cachedProductsData;
     return { categories: [], products: [] };
@@ -149,14 +175,26 @@ export async function saveProductsData(data: ProductsData): Promise<void> {
   // 1. Save to Cloud KV if available
   await kvSet("girja_products_data", data);
 
-  // 2. Save to Cloud REST API
+  // 2. Save to Cloud REST API (sanitizing if necessary)
   try {
-    await fetch(CLOUD_PRODUCTS_URL, {
+    let cloudData = data;
+    let res = await fetch(CLOUD_PRODUCTS_URL, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "girja_products_data", data }),
+      body: JSON.stringify({ name: "girja_products_data", data: cloudData }),
       cache: "no-store",
     });
+
+    // If initial PUT fails (e.g. 500 payload limit), retry with sanitized data
+    if (!res.ok) {
+      cloudData = sanitizeDataForCloud(data);
+      await fetch(CLOUD_PRODUCTS_URL, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "girja_products_data", data: cloudData }),
+        cache: "no-store",
+      });
+    }
   } catch (err) {
     console.warn("Could not update Cloud Storage for products:", err);
   }

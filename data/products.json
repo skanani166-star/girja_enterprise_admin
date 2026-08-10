@@ -1,4 +1,19 @@
 {
-  "categories": [],
+  "categories": [
+    {
+      "id": "t_shirts",
+      "name": "t-shirts",
+      "slug": "t-shirts",
+      "description": "Premium custom branded T-Shirts",
+      "icon": "FolderOpen"
+    },
+    {
+      "id": "caps",
+      "name": "caps",
+      "slug": "caps",
+      "description": "Custom promotional caps and headwear",
+      "icon": "FolderOpen"
+    }
+  ],
   "products": []
 }
