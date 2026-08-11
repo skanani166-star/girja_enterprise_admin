@@ -67,7 +67,6 @@ async function saveUploadedFiles(files: File[]) {
       writeFileSync(filePath, buffer);
       uploadedPaths.push(`/uploads/${fileName}`);
     } catch (err) {
-      // In serverless / read-only filesystem environments, fall back to Data URL
       const mime = file.type || 'image/jpeg';
       const base64 = buffer.toString('base64');
       uploadedPaths.push(`data:${mime};base64,${base64}`);
@@ -150,8 +149,9 @@ export async function POST(req: NextRequest) {
     data.products.unshift(newProduct);
     await saveProductsData(data);
     return NextResponse.json({ success: true, product: newProduct }, { headers: corsHeaders() });
-  } catch (err) {
-    return NextResponse.json({ error: 'Failed to create product' }, { status: 500, headers: corsHeaders() });
+  } catch (err: any) {
+    const message = err?.message || 'Failed to create product';
+    return NextResponse.json({ error: message }, { status: 500, headers: corsHeaders() });
   }
 }
 
@@ -164,8 +164,9 @@ export async function PUT(req: NextRequest) {
     data.products[idx] = normalizePayload({ ...data.products[idx], ...body });
     await saveProductsData(data);
     return NextResponse.json({ success: true, product: data.products[idx] }, { headers: corsHeaders() });
-  } catch (err) {
-    return NextResponse.json({ error: 'Failed to update' }, { status: 500, headers: corsHeaders() });
+  } catch (err: any) {
+    const message = err?.message || 'Failed to update product';
+    return NextResponse.json({ error: message }, { status: 500, headers: corsHeaders() });
   }
 }
 
@@ -178,7 +179,8 @@ export async function DELETE(req: NextRequest) {
     data.products = data.products.filter((p: any) => p.id !== id);
     await saveProductsData(data);
     return NextResponse.json({ success: true }, { headers: corsHeaders() });
-  } catch (err) {
-    return NextResponse.json({ error: 'Failed to delete' }, { status: 500, headers: corsHeaders() });
+  } catch (err: any) {
+    const message = err?.message || 'Failed to delete product';
+    return NextResponse.json({ error: message }, { status: 500, headers: corsHeaders() });
   }
 }

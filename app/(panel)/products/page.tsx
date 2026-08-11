@@ -152,12 +152,13 @@ export default function AdminProducts() {
         setPreviewImages([]);
         fetchProducts();
       } else {
+        const errData = await res.json().catch(() => ({}));
         setSaving(false);
-        alert('Failed to save product. Please check fields and try again.');
+        alert(errData.error || 'Failed to save product. Please check fields and try again.');
       }
-    } catch (err) {
+    } catch (err: any) {
       setSaving(false);
-      alert('Network error while saving product.');
+      alert(err?.message || 'Network error while saving product.');
     }
   };
 

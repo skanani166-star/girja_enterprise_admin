@@ -54,15 +54,26 @@ export default function AdminCategories() {
       icon: 'FolderOpen',
     };
 
-    await fetch('/api/categories', {
-      method: editing ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    try {
+      const res = await fetch('/api/categories', {
+        method: editing ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    setSaving(false);
-    setShowForm(false);
-    fetchData();
+      if (res.ok) {
+        setSaving(false);
+        setShowForm(false);
+        fetchData();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setSaving(false);
+        alert(errData.error || 'Failed to save category.');
+      }
+    } catch (err: any) {
+      setSaving(false);
+      alert(err?.message || 'Network error while saving category.');
+    }
   };
 
   const productCount = (catId: string) => products.filter(p => p.category === catId).length;

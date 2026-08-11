@@ -47,8 +47,9 @@ export async function POST(req: NextRequest) {
 
     await saveProductsData(data);
     return NextResponse.json({ success: true, categories: data.categories }, { headers: corsHeaders() });
-  } catch (err) {
-    return NextResponse.json({ error: 'Failed to update categories' }, { status: 500, headers: corsHeaders() });
+  } catch (err: any) {
+    const message = err?.message || 'Failed to update categories';
+    return NextResponse.json({ error: message }, { status: 500, headers: corsHeaders() });
   }
 }
 
@@ -63,8 +64,9 @@ export async function PUT(req: NextRequest) {
     data.categories[idx] = { ...data.categories[idx], ...body };
     await saveProductsData(data);
     return NextResponse.json({ success: true, category: data.categories[idx] }, { headers: corsHeaders() });
-  } catch (err) {
-    return NextResponse.json({ error: 'Failed to update category' }, { status: 500, headers: corsHeaders() });
+  } catch (err: any) {
+    const message = err?.message || 'Failed to update category';
+    return NextResponse.json({ error: message }, { status: 500, headers: corsHeaders() });
   }
 }
 
@@ -78,7 +80,8 @@ export async function DELETE(req: NextRequest) {
     data.categories = (data.categories || []).filter((c: any) => c.id !== id);
     await saveProductsData(data);
     return NextResponse.json({ success: true }, { headers: corsHeaders() });
-  } catch (err) {
-    return NextResponse.json({ error: 'Failed to delete category' }, { status: 500, headers: corsHeaders() });
+  } catch (err: any) {
+    const message = err?.message || 'Failed to delete category';
+    return NextResponse.json({ error: message }, { status: 500, headers: corsHeaders() });
   }
 }
