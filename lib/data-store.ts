@@ -52,9 +52,6 @@ export interface ContactEntry {
   status: string;
 }
 
-let cachedProductsData: ProductsData | null = null;
-let cachedContactsData: ContactEntry[] | null = null;
-
 const defaultCategories: Category[] = [
   {
     id: "t_shirts",
@@ -124,26 +121,6 @@ function readLocalContactsJson(): ContactEntry[] {
   }
 }
 
-async function seedFirestoreIfNeeded(): Promise<ProductsData> {
-  if (!db) return readLocalProductsJson();
-  const localData = readLocalProductsJson();
-  const catsToSeed = localData.categories.length > 0 ? localData.categories : defaultCategories;
-  const prodsToSeed = localData.products.length > 0 ? localData.products : defaultProducts;
-
-  try {
-    for (const cat of catsToSeed) {
-      await setDoc(doc(db, "categories", cat.id), cat);
-    }
-    for (const prod of prodsToSeed) {
-      await setDoc(doc(db, "products", prod.id), prod);
-    }
-  } catch (err) {
-    console.warn("Error seeding Firestore:", err);
-  }
-
-  return { categories: catsToSeed, products: prodsToSeed };
-}
-
 // --- PRODUCTS & CATEGORIES DATA MANAGEMENT ---
 
 export async function fetchProductsData(): Promise<ProductsData> {
@@ -152,7 +129,7 @@ export async function fetchProductsData(): Promise<ProductsData> {
       const catSnap = await getDocs(collection(db, "categories"));
       const prodSnap = await getDocs(collection(db, "products"));
 
-      const categories: Category[] = catSnap.docs.map((docSnap) => ({
+      let categories: Category[] = catSnap.docs.map((docSnap) => ({
         id: docSnap.id,
         ...docSnap.data(),
       } as Category));
@@ -162,29 +139,27 @@ export async function fetchProductsData(): Promise<ProductsData> {
         ...docSnap.data(),
       } as Product));
 
-      if (categories.length === 0 && products.length === 0) {
-        const seeded = await seedFirestoreIfNeeded();
-        cachedProductsData = seeded;
-        return seeded;
+      if (categories.length === 0) {
+        for (const cat of defaultCategories) {
+          try {
+            await setDoc(doc(db, "categories", cat.id), cat);
+            categories.push(cat);
+          } catch (e) {
+            console.warn("Could not seed category to Firestore:", e);
+          }
+        }
       }
 
-      const result = { categories, products };
-      cachedProductsData = result;
-      return result;
+      return { categories, products };
     } catch (err) {
       console.error("Error fetching products from Firestore:", err);
-      if (cachedProductsData) return cachedProductsData;
     }
   }
 
-  const localData = readLocalProductsJson();
-  cachedProductsData = localData;
-  return localData;
+  return readLocalProductsJson();
 }
 
 export async function saveProductsData(data: ProductsData): Promise<void> {
-  cachedProductsData = data;
-
   if (isFirebaseConfigured() && db) {
     try {
       const existingCatsSnap = await getDocs(collection(db, "categories"));
@@ -212,6 +187,7 @@ export async function saveProductsData(data: ProductsData): Promise<void> {
       }
     } catch (err) {
       console.error("Error saving products to Firestore:", err);
+      throw err;
     }
   }
 
@@ -230,15 +206,10 @@ export async function fetchContacts(): Promise<ContactEntry[]> {
     try {
       const q = query(collection(db, "contacts"), orderBy("createdAt", "desc"));
       const snap = await getDocs(q);
-      const contacts: ContactEntry[] = snap.docs.map((docSnap) => ({
+      return snap.docs.map((docSnap) => ({
         id: docSnap.id,
         ...docSnap.data(),
       } as ContactEntry));
-
-      if (contacts.length > 0 || !cachedContactsData) {
-        cachedContactsData = contacts;
-      }
-      return contacts;
     } catch (err) {
       console.error("Error fetching contacts from Firestore:", err);
       try {
@@ -248,7 +219,6 @@ export async function fetchContacts(): Promise<ContactEntry[]> {
           ...docSnap.data(),
         } as ContactEntry));
         contacts.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-        cachedContactsData = contacts;
         return contacts;
       } catch (err2) {
         console.error("Fallback contact fetch error:", err2);
@@ -256,14 +226,10 @@ export async function fetchContacts(): Promise<ContactEntry[]> {
     }
   }
 
-  const localContacts = readLocalContactsJson();
-  cachedContactsData = localContacts;
-  return localContacts;
+  return readLocalContactsJson();
 }
 
 export async function saveContacts(contacts: ContactEntry[]): Promise<void> {
-  cachedContactsData = contacts;
-
   if (isFirebaseConfigured() && db) {
     try {
       const existingSnap = await getDocs(collection(db, "contacts"));
@@ -280,6 +246,7 @@ export async function saveContacts(contacts: ContactEntry[]): Promise<void> {
       }
     } catch (err) {
       console.error("Error saving contacts to Firestore:", err);
+      throw err;
     }
   }
 
