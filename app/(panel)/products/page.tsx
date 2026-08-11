@@ -12,12 +12,49 @@ const emptyForm = {
   images: [] as string[],
 };
 
-function compressImageFile(file: File): Promise<string> {
+function compressImageFile(file: File, maxDimension = 1600, quality = 0.88): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
-      resolve((event.target?.result as string) || '');
+      const src = event.target?.result as string;
+      if (!src) return resolve('');
+
+      const img = new Image();
+      img.src = src;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        canvas.width = Math.max(width, 1);
+        canvas.height = Math.max(height, 1);
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        }
+
+        let dataUrl = canvas.toDataURL('image/jpeg', quality);
+
+        if (dataUrl.length > 450000) {
+          dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+        }
+
+        resolve(dataUrl);
+      };
+      img.onerror = () => resolve(src);
     };
     reader.onerror = () => resolve('');
   });
@@ -101,15 +138,23 @@ export default function AdminProducts() {
 
     const selectedCategory = form.category || (categories[0]?.id || 'general');
 
-    const payload = {
+    let processedImages = [...previewImages];
+    let payload = {
       id: form.id || `prod_${Date.now()}`,
       name: form.name.trim(),
       category: selectedCategory,
       minQty: Number(form.minQty || 0),
       description: form.description || '',
-      images: previewImages,
-      image: previewImages[0] || '',
+      images: processedImages,
+      image: processedImages[0] || '',
     };
+
+    // Firestore Document 1MB Limit Safety Guard
+    while (processedImages.length > 1 && JSON.stringify(payload).length > 900000) {
+      processedImages.pop();
+      payload.images = processedImages;
+      payload.image = processedImages[0] || '';
+    }
 
     const method = editing ? 'PUT' : 'POST';
     try {
