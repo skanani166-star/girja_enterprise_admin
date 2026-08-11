@@ -12,7 +12,7 @@ const emptyForm = {
   images: [] as string[],
 };
 
-function compressImageFile(file: File, maxDimension = 1600, quality = 0.88): Promise<string> {
+function compressImageFile(file: File, maxBytes = 450000): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -23,17 +23,67 @@ function compressImageFile(file: File, maxDimension = 1600, quality = 0.88): Pro
       const img = new Image();
       img.src = src;
       img.onload = () => {
+        const attemptCompress = (dim: number, qualityVal: number): string => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > dim || height > dim) {
+            if (width > height) {
+              height = Math.round((height * dim) / width);
+              width = dim;
+            } else {
+              width = Math.round((width * dim) / height);
+              height = dim;
+            }
+          }
+
+          canvas.width = Math.max(width, 1);
+          canvas.height = Math.max(height, 1);
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          }
+          return canvas.toDataURL('image/jpeg', qualityVal);
+        };
+
+        let result = attemptCompress(1600, 0.88);
+        if (result.length > maxBytes) result = attemptCompress(1200, 0.80);
+        if (result.length > maxBytes) result = attemptCompress(1000, 0.72);
+        if (result.length > maxBytes) result = attemptCompress(800, 0.62);
+        if (result.length > maxBytes) result = attemptCompress(600, 0.52);
+
+        resolve(result);
+      };
+      img.onerror = () => resolve(src);
+    };
+    reader.onerror = () => resolve('');
+  });
+}
+
+function optimizeDataUrlToBudget(dataUrl: string, maxBytes: number): Promise<string> {
+  if (dataUrl.length <= maxBytes || !dataUrl.startsWith('data:image/')) {
+    return Promise.resolve(dataUrl);
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = dataUrl;
+    img.onload = () => {
+      const attemptCompress = (dim: number, qualityVal: number): string => {
         const canvas = document.createElement('canvas');
         let width = img.width;
         let height = img.height;
 
-        if (width > maxDimension || height > maxDimension) {
+        if (width > dim || height > dim) {
           if (width > height) {
-            height = Math.round((height * maxDimension) / width);
-            width = maxDimension;
+            height = Math.round((height * dim) / width);
+            width = dim;
           } else {
-            width = Math.round((width * maxDimension) / height);
-            height = maxDimension;
+            width = Math.round((width * dim) / height);
+            height = dim;
           }
         }
 
@@ -45,18 +95,18 @@ function compressImageFile(file: File, maxDimension = 1600, quality = 0.88): Pro
           ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         }
-
-        let dataUrl = canvas.toDataURL('image/jpeg', quality);
-
-        if (dataUrl.length > 450000) {
-          dataUrl = canvas.toDataURL('image/jpeg', 0.78);
-        }
-
-        resolve(dataUrl);
+        return canvas.toDataURL('image/jpeg', qualityVal);
       };
-      img.onerror = () => resolve(src);
+
+      let result = attemptCompress(1200, 0.80);
+      if (result.length > maxBytes) result = attemptCompress(1000, 0.70);
+      if (result.length > maxBytes) result = attemptCompress(800, 0.60);
+      if (result.length > maxBytes) result = attemptCompress(600, 0.50);
+      if (result.length > maxBytes) result = attemptCompress(450, 0.42);
+
+      resolve(result);
     };
-    reader.onerror = () => resolve('');
+    img.onerror = () => resolve(dataUrl);
   });
 }
 
@@ -118,8 +168,11 @@ export default function AdminProducts() {
     if (!files.length) return;
 
     setUploadingImage(true);
+    const totalCount = previewImages.length + files.length;
+    const maxBytesPerImage = Math.floor(750000 / Math.max(totalCount, 1));
+
     const compressedResults = await Promise.all(
-      files.map((file) => compressImageFile(file))
+      files.map((file) => compressImageFile(file, maxBytesPerImage))
     );
 
     const validImages = compressedResults.filter(Boolean);
@@ -137,24 +190,22 @@ export default function AdminProducts() {
     setSaving(true);
 
     const selectedCategory = form.category || (categories[0]?.id || 'general');
+    const imageCount = previewImages.length;
+    const maxBytesPerImage = Math.floor(750000 / Math.max(imageCount, 1));
 
-    let processedImages = [...previewImages];
+    const optimizedImages = await Promise.all(
+      previewImages.map((imgStr) => optimizeDataUrlToBudget(imgStr, maxBytesPerImage))
+    );
+
     let payload = {
       id: form.id || `prod_${Date.now()}`,
       name: form.name.trim(),
       category: selectedCategory,
       minQty: Number(form.minQty || 0),
       description: form.description || '',
-      images: processedImages,
-      image: processedImages[0] || '',
+      images: optimizedImages,
+      image: optimizedImages[0] || '',
     };
-
-    // Firestore Document 1MB Limit Safety Guard
-    while (processedImages.length > 1 && JSON.stringify(payload).length > 900000) {
-      processedImages.pop();
-      payload.images = processedImages;
-      payload.image = processedImages[0] || '';
-    }
 
     const method = editing ? 'PUT' : 'POST';
     try {
