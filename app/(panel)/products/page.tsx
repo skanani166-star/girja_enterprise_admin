@@ -12,39 +12,12 @@ const emptyForm = {
   images: [] as string[],
 };
 
-function compressImageFile(file: File, maxWidth = 150, maxHeight = 150, quality = 0.3): Promise<string> {
+function compressImageFile(file: File): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
-      const src = event.target?.result as string;
-      if (!src) return resolve('');
-      const img = new Image();
-      img.src = src;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-
-        if (width > maxWidth || height > maxHeight) {
-          if (width / height > maxWidth / maxHeight) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
-          } else {
-            width = Math.round((width * maxHeight) / height);
-            height = maxHeight;
-          }
-        }
-
-        canvas.width = Math.max(width, 1);
-        canvas.height = Math.max(height, 1);
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
-        resolve(compressedDataUrl);
-      };
-      img.onerror = () => resolve(src);
+      resolve((event.target?.result as string) || '');
     };
     reader.onerror = () => resolve('');
   });
