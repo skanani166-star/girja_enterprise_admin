@@ -153,10 +153,14 @@ export function isPanelRoute(pathname: string): boolean {
 }
 
 export function isProtectedApiRoute(pathname: string, method: string): boolean {
+  // GET requests for products and categories are public so the frontend website can query catalog data
+  if (method.toUpperCase() === 'GET') {
+    return false;
+  }
   if (pathname.startsWith('/api/products') || pathname.startsWith('/api/categories')) {
     return true;
   }
-  if (pathname.startsWith('/api/contact') && method !== 'POST') {
+  if (pathname.startsWith('/api/contact') && method.toUpperCase() !== 'POST') {
     return true;
   }
   return false;

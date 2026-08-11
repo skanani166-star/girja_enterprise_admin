@@ -1,5 +1,15 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import path from "path";
+import {
+  collection,
+  getDocs,
+  doc,
+  setDoc,
+  deleteDoc,
+  query,
+  orderBy
+} from "@firebase/firestore";
+import { db, isFirebaseConfigured } from "./firebase";
 
 export interface Category {
   id: string;
@@ -42,80 +52,32 @@ export interface ContactEntry {
   status: string;
 }
 
-const CLOUD_PRODUCTS_URL = process.env.CLOUD_PRODUCTS_URL || "https://api.restful-api.dev/objects/ff8081819f7e10ae019fe066d0b01086";
-const CLOUD_CONTACTS_URL = process.env.CLOUD_CONTACTS_URL || "https://api.restful-api.dev/objects/ff8081819f7e10ae019fe067b10e1088";
-
 let cachedProductsData: ProductsData | null = null;
 let cachedContactsData: ContactEntry[] | null = null;
 
-function getKvConfig() {
-  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-  if (url && token) return { url: url.replace(/\/+$/, ""), token };
-  return null;
-}
+const defaultCategories: Category[] = [
+  {
+    id: "t_shirts",
+    name: "t-shirts",
+    slug: "t-shirts",
+    description: "Premium custom branded T-Shirts",
+    icon: "FolderOpen",
+  },
+  {
+    id: "caps",
+    name: "caps",
+    slug: "caps",
+    description: "Custom promotional caps and headwear",
+    icon: "FolderOpen",
+  },
+];
 
-async function kvGet<T>(key: string): Promise<T | null> {
-  const kv = getKvConfig();
-  if (!kv) return null;
-  try {
-    const res = await fetch(`${kv.url}/get/${key}`, {
-      headers: { Authorization: `Bearer ${kv.token}` },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    if (!json.result) return null;
-    return typeof json.result === "string" ? JSON.parse(json.result) : json.result;
-  } catch (err) {
-    console.error(`KV GET error for ${key}:`, err);
-    return null;
-  }
-}
-
-async function kvSet(key: string, value: any): Promise<boolean> {
-  const kv = getKvConfig();
-  if (!kv) return false;
-  try {
-    const res = await fetch(`${kv.url}/set/${key}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${kv.token}` },
-      body: JSON.stringify(value),
-      cache: "no-store",
-    });
-    return res.ok;
-  } catch (err) {
-    console.error(`KV SET error for ${key}:`, err);
-    return false;
-  }
-}
-
-// Helper to strip long base64 strings if cloud storage payload limit is hit
-function sanitizeDataForCloud(data: ProductsData): ProductsData {
-  return {
-    categories: Array.isArray(data.categories) ? data.categories : [],
-    products: (Array.isArray(data.products) ? data.products : []).map(p => {
-      const images = (Array.isArray(p.images) ? p.images : p.image ? [p.image] : []).map(img => {
-        if (typeof img === 'string' && img.length > 700) {
-          // If image base64 exceeds restful-api.dev 700 char limit, sanitize
-          return img.slice(0, 100) + '...';
-        }
-        return img;
-      });
-      return {
-        ...p,
-        images,
-        image: images[0] || p.image || '',
-      };
-    })
-  };
-}
-
-// --- PRODUCTS & CATEGORIES DATA ---
+const defaultProducts: Product[] = [];
 
 const candidateProductPaths = [
-  path.resolve(process.cwd(), "data", "products.json"),
+  process.env.ADMIN_DATA_PATH,
   path.resolve(process.cwd(), "..", "girja_enterprise", "data", "products.json"),
+  path.resolve(process.cwd(), "data", "products.json"),
 ].filter(Boolean) as string[];
 
 export function getProductDataPath(): string {
@@ -125,106 +87,10 @@ export function getProductDataPath(): string {
   return path.join(process.cwd(), "data", "products.json");
 }
 
-export async function fetchProductsData(): Promise<ProductsData> {
-  // If memory cache already has valid products, prefer memory cache for speed & reliability
-  if (cachedProductsData && Array.isArray(cachedProductsData.products) && cachedProductsData.products.length > 0) {
-    // Background refresh from cloud/KV
-    kvGet<ProductsData>("girja_products_data").then(kvData => {
-      if (kvData && Array.isArray(kvData.products) && kvData.products.length >= (cachedProductsData?.products.length || 0)) {
-        cachedProductsData = kvData;
-      }
-    }).catch(() => {});
-    return cachedProductsData;
-  }
-
-  // 1. Try Cloud KV
-  const kvData = await kvGet<ProductsData>("girja_products_data");
-  if (kvData && Array.isArray(kvData.products) && Array.isArray(kvData.categories)) {
-    cachedProductsData = kvData;
-    return kvData;
-  }
-
-  // 2. Try Cloud REST API
-  try {
-    const res = await fetch(CLOUD_PRODUCTS_URL, { cache: "no-store" });
-    if (res.ok) {
-      const json = await res.json();
-      const data = json.data || json;
-      if (Array.isArray(data.products) && Array.isArray(data.categories)) {
-        if (data.products.length > 0 || !cachedProductsData || cachedProductsData.products.length === 0) {
-          cachedProductsData = data;
-          return data;
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("Could not fetch products from Cloud Storage:", err);
-  }
-
-  // 3. Try reading local products.json file
-  try {
-    const targetPath = getProductDataPath();
-    const fileContent = readFileSync(targetPath, "utf-8");
-    const data = JSON.parse(fileContent);
-    const result: ProductsData = {
-      categories: Array.isArray(data.categories) ? data.categories : [],
-      products: Array.isArray(data.products) ? data.products : [],
-    };
-    if (result.products.length > 0 || !cachedProductsData) {
-      cachedProductsData = result;
-    }
-    return cachedProductsData || result;
-  } catch {
-    if (cachedProductsData) return cachedProductsData;
-    return { categories: [], products: [] };
-  }
-}
-
-export async function saveProductsData(data: ProductsData): Promise<void> {
-  cachedProductsData = data;
-
-  // 1. Save to Cloud KV if available
-  await kvSet("girja_products_data", data);
-
-  // 2. Save to Cloud REST API (sanitizing if necessary)
-  try {
-    let cloudData = data;
-    let res = await fetch(CLOUD_PRODUCTS_URL, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "girja_products_data", data: cloudData }),
-      cache: "no-store",
-    });
-
-    // If initial PUT fails (e.g. 500 payload limit), retry with sanitized data
-    if (!res.ok) {
-      cloudData = sanitizeDataForCloud(data);
-      await fetch(CLOUD_PRODUCTS_URL, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "girja_products_data", data: cloudData }),
-        cache: "no-store",
-      });
-    }
-  } catch (err) {
-    console.warn("Could not update Cloud Storage for products:", err);
-  }
-
-  // 3. Safe local FS save across candidate paths
-  for (const p of candidateProductPaths) {
-    try {
-      writeFileSync(p, JSON.stringify(data, null, 2));
-    } catch (err) {
-      console.warn("Could not write to local products.json file (serverless environment):", err);
-    }
-  }
-}
-
-// --- CONTACTS / QUOTES DATA ---
-
 const candidateContactPaths = [
-  path.resolve(process.cwd(), "data", "contacts.json"),
+  process.env.ADMIN_CONTACTS_PATH,
   path.resolve(process.cwd(), "..", "girja_enterprise", "data", "contacts.json"),
+  path.resolve(process.cwd(), "data", "contacts.json"),
 ].filter(Boolean) as string[];
 
 export function getContactsDataPath(): string {
@@ -234,66 +100,194 @@ export function getContactsDataPath(): string {
   return path.join(process.cwd(), "data", "contacts.json");
 }
 
-export async function fetchContacts(): Promise<ContactEntry[]> {
-  // 1. Try Cloud KV
-  const kvData = await kvGet<ContactEntry[]>("girja_contacts_data");
-  if (Array.isArray(kvData)) {
-    cachedContactsData = kvData;
-    return kvData;
-  }
-
-  // 2. Try Cloud REST API
+function readLocalProductsJson(): ProductsData {
   try {
-    const res = await fetch(CLOUD_CONTACTS_URL, { cache: "no-store" });
-    if (res.ok) {
-      const json = await res.json();
-      const data = json.data || json;
-      if (Array.isArray(data)) {
-        cachedContactsData = data;
-        return data;
-      }
-    }
-  } catch (err) {
-    console.warn("Could not fetch contacts from Cloud Storage:", err);
+    const targetPath = getProductDataPath();
+    const fileContent = readFileSync(targetPath, "utf-8");
+    const data = JSON.parse(fileContent);
+    return {
+      categories: Array.isArray(data.categories) && data.categories.length > 0 ? data.categories : defaultCategories,
+      products: Array.isArray(data.products) ? data.products : [],
+    };
+  } catch {
+    return { categories: defaultCategories, products: [] };
   }
+}
 
-  // 3. Try reading local contacts.json
+function readLocalContactsJson(): ContactEntry[] {
   try {
     const targetPath = getContactsDataPath();
     const data = JSON.parse(readFileSync(targetPath, "utf-8"));
-    const result = Array.isArray(data) ? data : [];
-    cachedContactsData = result;
-    return result;
+    return Array.isArray(data) ? data : [];
   } catch {
-    if (cachedContactsData) return cachedContactsData;
     return [];
   }
+}
+
+async function seedFirestoreIfNeeded(): Promise<ProductsData> {
+  if (!db) return readLocalProductsJson();
+  const localData = readLocalProductsJson();
+  const catsToSeed = localData.categories.length > 0 ? localData.categories : defaultCategories;
+  const prodsToSeed = localData.products.length > 0 ? localData.products : defaultProducts;
+
+  try {
+    for (const cat of catsToSeed) {
+      await setDoc(doc(db, "categories", cat.id), cat);
+    }
+    for (const prod of prodsToSeed) {
+      await setDoc(doc(db, "products", prod.id), prod);
+    }
+  } catch (err) {
+    console.warn("Error seeding Firestore:", err);
+  }
+
+  return { categories: catsToSeed, products: prodsToSeed };
+}
+
+// --- PRODUCTS & CATEGORIES DATA MANAGEMENT ---
+
+export async function fetchProductsData(): Promise<ProductsData> {
+  if (isFirebaseConfigured() && db) {
+    try {
+      const catSnap = await getDocs(collection(db, "categories"));
+      const prodSnap = await getDocs(collection(db, "products"));
+
+      const categories: Category[] = catSnap.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      } as Category));
+
+      const products: Product[] = prodSnap.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      } as Product));
+
+      if (categories.length === 0 && products.length === 0) {
+        const seeded = await seedFirestoreIfNeeded();
+        cachedProductsData = seeded;
+        return seeded;
+      }
+
+      const result = { categories, products };
+      cachedProductsData = result;
+      return result;
+    } catch (err) {
+      console.error("Error fetching products from Firestore:", err);
+      if (cachedProductsData) return cachedProductsData;
+    }
+  }
+
+  const localData = readLocalProductsJson();
+  cachedProductsData = localData;
+  return localData;
+}
+
+export async function saveProductsData(data: ProductsData): Promise<void> {
+  cachedProductsData = data;
+
+  if (isFirebaseConfigured() && db) {
+    try {
+      const existingCatsSnap = await getDocs(collection(db, "categories"));
+      const currentCatIds = new Set(data.categories.map((c) => c.id));
+
+      for (const cat of data.categories) {
+        await setDoc(doc(db, "categories", cat.id), cat);
+      }
+      for (const docSnap of existingCatsSnap.docs) {
+        if (!currentCatIds.has(docSnap.id)) {
+          await deleteDoc(doc(db, "categories", docSnap.id));
+        }
+      }
+
+      const existingProdsSnap = await getDocs(collection(db, "products"));
+      const currentProdIds = new Set(data.products.map((p) => p.id));
+
+      for (const prod of data.products) {
+        await setDoc(doc(db, "products", prod.id), prod);
+      }
+      for (const docSnap of existingProdsSnap.docs) {
+        if (!currentProdIds.has(docSnap.id)) {
+          await deleteDoc(doc(db, "products", docSnap.id));
+        }
+      }
+    } catch (err) {
+      console.error("Error saving products to Firestore:", err);
+    }
+  }
+
+  try {
+    const targetPath = getProductDataPath();
+    writeFileSync(targetPath, JSON.stringify(data, null, 2));
+  } catch (err) {
+    // Ignore EROFS errors
+  }
+}
+
+// --- CONTACTS / QUOTES DATA MANAGEMENT ---
+
+export async function fetchContacts(): Promise<ContactEntry[]> {
+  if (isFirebaseConfigured() && db) {
+    try {
+      const q = query(collection(db, "contacts"), orderBy("createdAt", "desc"));
+      const snap = await getDocs(q);
+      const contacts: ContactEntry[] = snap.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      } as ContactEntry));
+
+      if (contacts.length > 0 || !cachedContactsData) {
+        cachedContactsData = contacts;
+      }
+      return contacts;
+    } catch (err) {
+      console.error("Error fetching contacts from Firestore:", err);
+      try {
+        const snap = await getDocs(collection(db, "contacts"));
+        const contacts: ContactEntry[] = snap.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        } as ContactEntry));
+        contacts.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+        cachedContactsData = contacts;
+        return contacts;
+      } catch (err2) {
+        console.error("Fallback contact fetch error:", err2);
+      }
+    }
+  }
+
+  const localContacts = readLocalContactsJson();
+  cachedContactsData = localContacts;
+  return localContacts;
 }
 
 export async function saveContacts(contacts: ContactEntry[]): Promise<void> {
   cachedContactsData = contacts;
 
-  // 1. Save to Cloud KV if available
-  await kvSet("girja_contacts_data", contacts);
+  if (isFirebaseConfigured() && db) {
+    try {
+      const existingSnap = await getDocs(collection(db, "contacts"));
+      const currentIds = new Set(contacts.map((c) => c.id));
 
-  // 2. Save to Cloud REST API
-  try {
-    await fetch(CLOUD_CONTACTS_URL, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "girja_contacts_data", data: contacts }),
-      cache: "no-store",
-    });
-  } catch (err) {
-    console.warn("Could not update Cloud Storage for contacts:", err);
+      for (const contact of contacts) {
+        await setDoc(doc(db, "contacts", contact.id), contact);
+      }
+
+      for (const docSnap of existingSnap.docs) {
+        if (!currentIds.has(docSnap.id)) {
+          await deleteDoc(doc(db, "contacts", docSnap.id));
+        }
+      }
+    } catch (err) {
+      console.error("Error saving contacts to Firestore:", err);
+    }
   }
 
-  // 3. Safe local FS save
   for (const p of candidateContactPaths) {
     try {
       writeFileSync(p, JSON.stringify(contacts, null, 2));
     } catch {
-      // Ignore EROFS errors
+      // Ignore write errors
     }
   }
 }
